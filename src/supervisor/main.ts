@@ -17,6 +17,7 @@ import { handleRequest } from "./router";
 import { ProjectSupervisor } from "./runner";
 import { SiteStore } from "./sites";
 import { openStore } from "./store";
+import { ProjectQuota } from "./quota";
 import { readRuntimes, readSystem } from "./system";
 
 const HOMES = process.env.QUAI_HOMES ?? "/srv/quai/homes";
@@ -42,6 +43,13 @@ const store = openStore(join(STATE, "quai.db"));
 const runner = new LinuxRunner();
 const projects = new ProjectSupervisor(runner);
 
+async function runCommand(argv: string[]): Promise<{ ok: boolean; stderr: string }> {
+  const proc = Bun.spawn(argv, { stdout: "pipe", stderr: "pipe" });
+  const stderr = await new Response(proc.stderr).text();
+  await proc.exited;
+  return { ok: proc.exitCode === 0, stderr: stderr.trim() };
+}
+
 async function chown(path: string, uid: number): Promise<void> {
   const proc = Bun.spawn(["chown", "-R", `${uid}:${uid}`, path], { stderr: "pipe" });
   await proc.exited;
@@ -58,6 +66,20 @@ const deployDeps = {
   },
   homeFor,
   chown,
+  applyQuota: async (project: string, uid: number, limit: string) => {
+    const quota = new ProjectQuota(HOMES, project, uid);
+    await mkdir(join(sitesDirectory, project), { recursive: true });
+    for (const command of quota.applyCommands(limit)) {
+      const result = await runCommand(command);
+      if (!result.ok) {
+        // Refusing the deploy is right: without a quota the project could fill
+        // the volume every other project depends on.
+        throw new Error(
+          "Could not apply the disk quota for '" + project + "': " + result.stderr,
+        );
+      }
+    }
+  },
 };
 
 // Accounts, cgroups and namespaces do not survive the container being

@@ -8,8 +8,9 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { subdomainOf } from "./naming";
+import { DEFAULT_DISK_QUOTA } from "./quota";
 import type { ProjectSupervisor } from "./runner";
-import type { SiteStore } from "./sites";
+import type { SiteStorage } from "./sites";
 import type { Store } from "./store";
 import { unpackTar } from "./tar";
 import { safeExtractPath } from "./unpack";
@@ -29,7 +30,7 @@ export type DeployResult = {
 };
 
 export type DeployDeps = {
-  sites: SiteStore;
+  sites: SiteStorage;
   store: Store;
   zone: string;
   projects: ProjectSupervisor;
@@ -40,6 +41,8 @@ export type DeployDeps = {
   chown?: (path: string, uid: number) => Promise<void>;
   /** Set false where network namespaces are unavailable, such as in tests. */
   isolateNetwork?: boolean;
+  /** Caps the space a project may occupy. Absent where quotas are unavailable. */
+  applyQuota?: (project: string, uid: number, limit: string) => Promise<void>;
 };
 
 export async function deployArchive(
@@ -55,10 +58,17 @@ export async function deployArchive(
 
   const uid = deps.store.allocateUid(project);
 
+
+
   if (spec.type === "static") {
     // A static project never starts a process: the router serves it straight
     // from disk, so it costs nothing when idle.
     await deps.sites.publish(project, entries);
+
+    // Marking has to follow publication: an atomic publish renames the
+    // directory into place, and a rename does not carry the project attribute
+    // with it. Marking earlier leaves the content on project 0, uncapped.
+    await deps.applyQuota?.(project, uid, DEFAULT_DISK_QUOTA);
     deps.store.upsertProject({ name: project, type: "static" });
   } else {
     if (!spec.start) {
@@ -76,6 +86,7 @@ export async function deployArchive(
       await writeFile(destination, entry.contents);
     }
     await deps.chown?.(home, uid);
+    await deps.applyQuota?.(project, uid, DEFAULT_DISK_QUOTA);
 
     const internalPort = spec.internalPort ?? 8080;
     deps.store.upsertProject({

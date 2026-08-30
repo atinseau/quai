@@ -153,3 +153,60 @@ describe("deploying a service", () => {
   });
 });
 
+
+describe("disk quota on deploy", () => {
+  test("a quota is applied to every project", async () => {
+    const applied: { project: string; limit: string }[] = [];
+    await deployArchive("my-site", packTar([entry("index.html", "hi")]), staticSpec, {
+      ...deps,
+      applyQuota: async (project, _uid, limit) => {
+        applied.push({ project, limit });
+      },
+    });
+    expect(applied).toEqual([{ project: "my-site", limit: "1Gi" }]);
+  });
+
+  test("the quota is applied after publication, since a rename drops the mark", async () => {
+    // An atomic publish renames the directory into place, and the project
+    // attribute does not survive the rename. Marking first silently leaves the
+    // content uncapped on project 0 — observed in the container.
+    const order: string[] = [];
+    await deployArchive("my-site", packTar([entry("index.html", "hi")]), staticSpec, {
+      ...deps,
+      applyQuota: async () => {
+        order.push("quota");
+      },
+      sites: {
+        rootFor: (project: string) => deps.sites.rootFor(project),
+        publish: async () => {
+          order.push("publish");
+        },
+        remove: async () => {},
+      },
+    });
+    expect(order).toEqual(["publish", "quota"]);
+  });
+
+  test("the quota is keyed on the project's uid", async () => {
+    let seenUid = -1;
+    await deployArchive("my-site", packTar([entry("index.html", "hi")]), staticSpec, {
+      ...deps,
+      applyQuota: async (_project, uid) => {
+        seenUid = uid;
+      },
+    });
+    expect(seenUid).toBe(deps.store.lookup("my-site")!.uid);
+  });
+
+  test("deploying still works where quotas are unavailable", async () => {
+    // Tests and non-XFS hosts have no quota support; the deploy must not fail.
+    const result = await deployArchive(
+      "my-site",
+      packTar([entry("index.html", "hi")]),
+      staticSpec,
+      { ...deps, applyQuota: undefined },
+    );
+    expect(result.project).toBe("my-site");
+  });
+});
+

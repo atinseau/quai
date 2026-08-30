@@ -12,7 +12,14 @@ import { safeExtractPath } from "./unpack";
 
 export type StoredEntry = { name: string; contents: Uint8Array };
 
-export class SiteStore {
+/** What the deploy path needs from storage; a class is one implementation. */
+export interface SiteStorage {
+  rootFor(project: string): string;
+  publish(project: string, entries: StoredEntry[]): Promise<void>;
+  remove(project: string): Promise<void>;
+}
+
+export class SiteStore implements SiteStorage {
   constructor(private readonly baseDirectory: string) {}
 
   rootFor(project: string): string {
