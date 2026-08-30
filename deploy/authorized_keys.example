@@ -1,0 +1,12 @@
+# Deploy key setup
+#
+# Every deploy key is pinned to the forced command, so a deploy credential can
+# never yield a shell. Add to ~/.ssh/authorized_keys inside the container:
+#
+#   command="/usr/local/bin/quai-forced-command",no-pty,no-port-forwarding,\
+#   no-agent-forwarding,no-X11-forwarding,no-user-rc ssh-ed25519 AAAA... user@host
+#
+# The client never needs to know this: "quai" runs
+#   ssh <host> quai-deploy <project>
+# and sshd substitutes the forced command regardless of what was requested.
+

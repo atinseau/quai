@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "bin": { "quai": "./src/cli/main.ts" },
   "scripts": {
     "start": "bun run src/supervisor/main.ts",
     "test": "bun test",

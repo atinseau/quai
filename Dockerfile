@@ -1,9 +1,6 @@
 # Quai base image: the supervisor plus every runtime it can host.
-# Measured in the prototype at ~495 MB with all runtimes present.
 FROM debian:bookworm-slim
 
-# Runtime versions are pinned so an image rebuild cannot silently change what
-# projects run on.
 ARG NODE_MAJOR=22
 ARG BUN_VERSION=1.4.0
 
@@ -18,10 +15,15 @@ WORKDIR /opt/quai
 COPY package.json tsconfig.json ./
 COPY src/ ./src/
 
+# The deploy key is pinned to this command, so it can never yield a shell.
+RUN printf '#!/bin/sh\nexec bun run /opt/quai/src/ingest/forced-command.ts\n' \
+      > /usr/local/bin/quai-forced-command \
+  && chmod +x /usr/local/bin/quai-forced-command
+
 ENV QUAI_HOMES=/srv/quai/homes
+ENV QUAI_STATE=/srv/quai/state
 ENV QUAI_PORT=8080
 EXPOSE 8080
 
-# The supervisor runs as PID 1 so it owns the lifecycle of every project process.
 CMD ["bun", "run", "src/supervisor/main.ts"]
 
