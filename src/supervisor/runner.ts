@@ -25,6 +25,8 @@ export type RunSpec = {
   limits?: { memory: string; cpu: string; pids: number };
   /** Set false only where cgroups are unavailable, such as in tests. */
   limitResources?: boolean;
+  /** Set false only where nsjail is unavailable, such as in tests. */
+  confineSyscalls?: boolean;
 };
 
 export type RunHandle = {

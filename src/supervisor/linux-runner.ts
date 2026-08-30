@@ -10,14 +10,19 @@
  * the seam changes when it lands.
  */
 
+import { existsSync } from "node:fs";
 import { mkdir, rmdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { accountNameFor } from "./accounts";
 import { DEFAULT_LIMITS, ProjectCgroup, type Limits } from "./cgroup";
 import { containerCgroupPath } from "./cgroup-path";
 import { EgressPolicy, natCommands, natInstallCommand } from "./egress";
+import { buildJailArgs, resolveExecutable } from "./seccomp";
 import { NetworkNamespace, allocateSubnet } from "./netns";
 import type { RunHandle, RunSpec, RunState, Runner } from "./runner";
+
+/** Where the rendered policy is written at startup. */
+export const SECCOMP_POLICY_PATH = "/etc/quai/seccomp.policy";
 
 type Running = {
   handle: RunHandle;
@@ -52,6 +57,23 @@ export class LinuxRunner implements Runner {
     // to be applied after the switch rather than inherited through it.
     const envArgs = Object.entries(environment).map(([key, value]) => `${key}=${value}`);
 
+    // Syscall confinement wraps the project command itself, inside the uid
+    // switch: nsjail must apply the filter to the project, not to setpriv.
+    // nsjail execs directly and never consults PATH, so the executable has to
+    // be resolved here or it fails with ENOENT.
+    const [name, ...rest] = spec.command;
+    const command = [resolveExecutable(name ?? "", existsSync), ...rest];
+
+    const confined =
+      spec.confineSyscalls === false
+        ? command
+        : buildJailArgs({
+            policyPath: SECCOMP_POLICY_PATH,
+            command,
+            cwd: spec.home,
+            env: environment,
+          });
+
     const launch = [
       "setpriv",
       "--reuid",
@@ -62,7 +84,7 @@ export class LinuxRunner implements Runner {
       "--",
       "env",
       ...envArgs,
-      ...spec.command,
+      ...confined,
     ];
 
     // Entering the namespace happens before dropping privileges: it needs

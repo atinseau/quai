@@ -5,12 +5,13 @@
  * anyway would let projects believe they are contained when they are not.
  */
 
-import { mkdir, readFile, readdir } from "node:fs/promises";
-import { join } from "node:path";
+import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import { createAccount, homeFor, readAccounts } from "./accounts";
 import { buildHealthReport } from "./health";
 import { deployArchive, type DeploySpec } from "./ingest";
-import { LinuxRunner } from "./linux-runner";
+import { LinuxRunner, SECCOMP_POLICY_PATH } from "./linux-runner";
+import { SeccompProfile } from "./seccomp";
 import { checkIsolationSupport, formatFailures } from "./preflight";
 import { formatReport, reconcile } from "./reconcile";
 import { handleRequest } from "./router";
@@ -37,6 +38,11 @@ if (!isolation.supported) {
 const sitesDirectory = join(HOMES, "sites");
 await mkdir(sitesDirectory, { recursive: true });
 await mkdir(STATE, { recursive: true });
+
+// The policy is rendered to disk so nsjail can read it, and so an operator
+// can audit exactly what is enforced.
+await mkdir(dirname(SECCOMP_POLICY_PATH), { recursive: true });
+await writeFile(SECCOMP_POLICY_PATH, new SeccompProfile().policy());
 
 const sites = new SiteStore(sitesDirectory);
 const store = openStore(join(STATE, "quai.db"));
@@ -157,6 +163,7 @@ Bun.serve({
           type: project.type,
           uid: project.uid,
           run: await projects.status(project.name),
+          seccompPolicy: SECCOMP_POLICY_PATH,
         })),
       );
       return Response.json(states);
