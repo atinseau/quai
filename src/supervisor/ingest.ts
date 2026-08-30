@@ -44,6 +44,11 @@ export type DeployDeps = {
   /** Where a project's own files live. Injected so tests need no real homes. */
   homeFor: (project: string) => string;
   /** Hands a directory to the project's uid. Injected for the same reason. */
+  /**
+   * Builds a tree at the staging path, then swaps it into place atomically.
+   * Injected so tests need no real filesystem.
+   */
+  replaceTree: (staging: string, build: () => Promise<void>) => Promise<void>;
   chown?: (path: string, uid: number) => Promise<void>;
   /** Set false where network namespaces are unavailable, such as in tests. */
   isolateNetwork?: boolean;
@@ -69,7 +74,9 @@ export async function deployArchive(
   if (spec.type === "static") {
     // A static project never starts a process: the router serves it straight
     // from disk, so it costs nothing when idle.
-    await deps.sites.publish(project, entries);
+    // The uid owns its content even for a static project, so a neighbour
+    // cannot read it straight off the volume.
+    await deps.sites.publish(project, entries, uid);
 
     // Marking has to follow publication: an atomic publish renames the
     // directory into place, and a rename does not carry the project attribute
@@ -97,12 +104,23 @@ export async function deployArchive(
 
     // Content lands in the project's own home, owned by its uid, which is what
     // keeps a neighbour from reading it.
+    //
+    // It is unpacked beside the home and swapped in, never written over the
+    // previous deploy: the project owns that directory and could have left a
+    // symlink there, which the supervisor would follow as root and write
+    // wherever it points. A fresh directory has nothing to follow, and the
+    // swap also removes files the project no longer ships.
     const home = deps.homeFor(project);
-    for (const entry of entries) {
-      const destination = safeExtractPath(home, entry.name);
-      await mkdir(dirname(destination), { recursive: true });
-      await writeFile(destination, entry.contents);
-    }
+    const staging = home + ".incoming";
+
+    await deps.replaceTree(staging, async () => {
+      for (const entry of entries) {
+        const destination = safeExtractPath(staging, entry.name);
+        await mkdir(dirname(destination), { recursive: true });
+        await writeFile(destination, entry.contents, { flag: "wx" });
+      }
+    });
+
     await deps.chown?.(home, uid);
     await deps.applyQuota?.(project, uid, DEFAULT_DISK_QUOTA);
 

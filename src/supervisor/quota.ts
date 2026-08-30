@@ -26,11 +26,19 @@ export class ProjectQuota {
     readonly project: string,
     /** The project's uid, reused as its quota project id. */
     readonly projectId: number,
+    /**
+     * Where the project's content actually lives.
+     *
+     * A static project keeps its files under sites/, a service under its own
+     * home in projects/. Assuming one shape silently left the other on quota
+     * project 0, where no limit applies at all.
+     */
+    private readonly contentPath: string,
   ) {}
 
   /** The directory the quota applies to. Public so callers can create it. */
   get directory(): string {
-    return `${this.mountPoint}/sites/${this.project}`;
+    return this.contentPath;
   }
 
   /**
@@ -39,9 +47,6 @@ export class ProjectQuota {
    * The directory must exist first: xfs_quota marks an existing tree, and
    * marking a missing path silently leaves the content on project 0, where no
    * limit applies.
-   *
-   * The limit is hard: a soft limit would only warn while the disk kept
-   * filling, which defeats the point.
    */
   applyCommands(limit: string): string[][] {
     const bytes = parseSize(limit);
@@ -55,10 +60,15 @@ export class ProjectQuota {
 
   /** Command that reports current usage against the limit. */
   reportCommand(): string[] {
-    return ["xfs_quota", "-x", "-c", `report -p -N -b`, this.mountPoint];
+    return ["xfs_quota", "-x", "-c", "report -p -N -b", this.mountPoint];
   }
 
-  /** Command that releases the quota when a project is deleted. */
+  /**
+   * Commands that release the quota when a project is deleted.
+   *
+   * Without this the limit lingers against a project id that no longer exists,
+   * and the accounting slowly fills with dead entries.
+   */
   releaseCommands(): string[][] {
     return [
       ["xfs_quota", "-x", "-c", `limit -p bhard=0 ${this.projectId}`, this.mountPoint],

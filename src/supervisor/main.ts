@@ -6,7 +6,7 @@
  */
 
 import { existsSync } from "node:fs";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   createAccount,
@@ -79,12 +79,41 @@ const deployDeps = {
     await prepareHome(project, uid);
   },
   homeFor,
+  /**
+   * Unpacks beside the home, then swaps: the project owns its home and could
+   * have left a symlink there, which the supervisor would follow as root.
+   */
+  replaceTree: async (staging: string, build: () => Promise<void>) => {
+    const target = staging.replace(/\.incoming$/, "");
+    const previous = target + ".previous";
+
+    await rm(staging, { recursive: true, force: true });
+    await mkdir(staging, { recursive: true });
+
+    try {
+      await build();
+    } catch (error) {
+      await rm(staging, { recursive: true, force: true });
+      throw error;
+    }
+
+    await rm(previous, { recursive: true, force: true });
+    await rename(target, previous).catch(() => {});
+    await rename(staging, target);
+    await rm(previous, { recursive: true, force: true });
+  },
   chown,
   applyQuota: async (project: string, uid: number, limit: string) => {
-    const quota = new ProjectQuota(HOMES, project, uid);
+    // The quota follows the content: a static project keeps its files under
+    // sites/, a service in its own home. Capping the wrong one leaves the
+    // project on quota project 0, where no limit applies.
+    const staticPath = join(sitesDirectory, project);
+    const contentPath = existsSync(staticPath) ? staticPath : homeFor(project);
+    const quota = new ProjectQuota(HOMES, project, uid, contentPath);
     // Only a static project keeps content here; creating the directory for a
     // service would leave an empty one that muddies what is actually deployed.
     if (!existsSync(quota.directory)) return;
+
     for (const command of quota.applyCommands(limit)) {
       const result = await runCommand(command);
       if (!result.ok) {
@@ -229,6 +258,15 @@ Bun.serve({
         // Order matters: stop the process before removing what it runs on, so
         // nothing is left holding a deleted home.
         await projects.stop(project);
+
+        // Release the quota before the content disappears, so the limit does
+        // not linger against a project id that no longer exists.
+        const record = store.lookup(project);
+        if (record !== null) {
+          const quota = new ProjectQuota(HOMES, project, record.uid, homeFor(project));
+          for (const command of quota.releaseCommands()) await runCommand(command);
+        }
+
         await sites.remove(project);
         await removeAccount(project);
         store.removeProject(project);

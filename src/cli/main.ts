@@ -72,7 +72,9 @@ async function deploy(directory: string): Promise<void> {
   if (spec.runtime) query.set("runtime", spec.runtime);
   if (spec.start) query.set("start", spec.start);
   if (spec.internalPort) query.set("port", String(spec.internalPort));
-  if (spec.domains?.length) query.set("domains", spec.domains.join(","));
+  // Always sent, even empty: the server replaces the whole set, so an omitted
+  // parameter would leave a removed domain still serving.
+  query.set("domains", (spec.domains ?? []).join(","));
 
   const archive = packTar(files);
   // The SSH key on the server is pinned to a forced command, so this
@@ -173,9 +175,31 @@ async function envCommand(args: string[], directory: string): Promise<void> {
   }
 }
 
-async function logsCommand(directory: string): Promise<void> {
+async function logsCommand(args: string[]): Promise<void> {
+  const follow = args.includes("-f") || args.includes("--follow");
+  const directory = args.find((argument) => !argument.startsWith("-")) ?? process.cwd();
   const project = projectNameFromPath(resolve(directory));
-  process.stdout.write(await admin("logs", project));
+
+  if (!follow) {
+    process.stdout.write(await admin("logs", project));
+    return;
+  }
+
+  // Polling rather than streaming: the buffer is bounded and a deploy is
+  // diagnosed in seconds, so a second of latency costs nothing and keeps the
+  // SSH channel simple.
+  let seen = "";
+  for (;;) {
+    const current = await admin("logs", project);
+    if (current.startsWith(seen)) {
+      process.stdout.write(current.slice(seen.length));
+    } else {
+      // The buffer rolled past what we had; resynchronise rather than guess.
+      process.stdout.write(current);
+    }
+    seen = current;
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
 }
 
 async function removeCommand(directory: string): Promise<void> {
@@ -226,7 +250,7 @@ switch (command) {
     await envCommand(rest, process.cwd());
     break;
   case "logs":
-    await logsCommand(rest[0] ?? process.cwd());
+    await logsCommand(rest);
     break;
   case "rm":
     await removeCommand(rest[0] ?? process.cwd());
@@ -243,7 +267,7 @@ switch (command) {
         "  quai deploy [dir]         deploy a specific directory",
         "  quai init [dir]           write a quai.toml for this project",
         "  quai env ls|add|rm|pull   manage environment variables",
-        "  quai logs                 show recent output",
+        "  quai logs [-f]            show recent output, -f to follow",
         "  quai rm                   delete the project and everything it owns",
         "  quai login <host> <zone>  point the CLI at an instance",
       ].join("\n"),

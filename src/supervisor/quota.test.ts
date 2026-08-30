@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { DEFAULT_DISK_QUOTA, ProjectQuota, parseQuotaReport } from "./quota";
 
 describe("quota commands", () => {
-  const quota = new ProjectQuota("/srv/quai/homes", "api", 10000);
+  const quota = new ProjectQuota("/srv/quai/homes", "api", 10000, "/srv/quai/homes/sites/api");
 
   test("the project id follows its uid, so it survives a restart", () => {
     expect(quota.projectId).toBe(10000);
@@ -34,7 +34,7 @@ describe("quota commands", () => {
   });
 
   test("two projects get distinct quota ids", () => {
-    const other = new ProjectQuota("/srv/quai/homes", "beta", 10001);
+    const other = new ProjectQuota("/srv/quai/homes", "beta", 10001, "/srv/quai/homes/sites/beta");
     expect(other.projectId).not.toBe(quota.projectId);
   });
 
@@ -68,14 +68,40 @@ describe("quota ordering", () => {
   test("the directory a quota applies to is exposed, so it can be created first", () => {
     // xfs_quota marks an existing tree. Marking a missing path silently leaves
     // the content on project 0, where no limit applies — seen in the container.
-    const quota = new ProjectQuota("/srv/quai/homes", "api", 10000);
+    const quota = new ProjectQuota("/srv/quai/homes", "api", 10000, "/srv/quai/homes/sites/api");
     expect(quota.directory).toBe("/srv/quai/homes/sites/api");
   });
 
   test("the marked directory is the one the commands target", () => {
-    const quota = new ProjectQuota("/srv/quai/homes", "api", 10000);
+    const quota = new ProjectQuota("/srv/quai/homes", "api", 10000, "/srv/quai/homes/sites/api");
     const marking = quota.applyCommands("1Gi")[0]!.join(" ");
     expect(marking).toContain(quota.directory);
+  });
+});
+
+
+describe("quota follows the content, whatever its shape", () => {
+  test("a static project is capped where its files live", () => {
+    const quota = new ProjectQuota("/srv/quai/homes", "site", 10000, "/srv/quai/homes/sites/site");
+    expect(quota.directory).toBe("/srv/quai/homes/sites/site");
+  });
+
+  test("a service is capped in its own home, not under sites/", () => {
+    // Assuming sites/ left every service on quota project 0, uncapped, while
+    // the report still showed a limit — observed in the container.
+    const quota = new ProjectQuota("/srv/quai/homes", "api", 10001, "/srv/quai/homes/projects/api");
+    expect(quota.directory).toBe("/srv/quai/homes/projects/api");
+  });
+
+  test("the marking command targets that same path", () => {
+    const quota = new ProjectQuota("/srv/quai/homes", "api", 10001, "/srv/quai/homes/projects/api");
+    expect(quota.applyCommands("1Gi")[0]!.join(" ")).toContain("/srv/quai/homes/projects/api");
+  });
+
+  test("releasing a quota clears the hard limit", () => {
+    // Otherwise the limit lingers against a project id that no longer exists.
+    const quota = new ProjectQuota("/srv/quai/homes", "api", 10001, "/x");
+    expect(quota.releaseCommands()[0]!.join(" ")).toContain("bhard=0");
   });
 });
 

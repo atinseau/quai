@@ -42,8 +42,19 @@ export async function attemptDelegation(cgroupPath: string): Promise<DelegationO
   const base = CGROUP_ROOT + containerRootOf(cgroupPath);
 
   try {
-    await mkdir(join(base, "quai-supervisor"), { recursive: true });
-    await writeFile(join(base, "quai-supervisor", "cgroup.procs"), String(process.pid));
+    const leaf = join(base, "quai-supervisor");
+    await mkdir(leaf, { recursive: true });
+
+    // Every process in the root has to move, not just this one: a cgroup
+    // cannot delegate controllers while it still holds any process, so a
+    // sibling such as sshd would block the delegation with EBUSY.
+    const occupants = (await read(join(base, "cgroup.procs"))).split("\n").filter(Boolean);
+    for (const pid of occupants) {
+      // A process that exits mid-move is not an error; the goal is an empty root.
+      await writeFile(join(leaf, "cgroup.procs"), pid).catch(() => {});
+    }
+    await writeFile(join(leaf, "cgroup.procs"), String(process.pid)).catch(() => {});
+
     await writeFile(join(base, "cgroup.subtree_control"), "+memory +cpu +pids");
 
     const probe = join(base, "quai-preflight");

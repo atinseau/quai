@@ -225,7 +225,19 @@ export class LinuxRunner implements Runner {
     // cgroup files alone constrain nothing until a process lives there.
     if (cgroup !== null) {
       const attach = cgroup.attachWrite(child.pid);
-      await writeFile(join(cgroup.path, attach.file), attach.value).catch(() => {});
+      try {
+        await writeFile(join(cgroup.path, attach.file), attach.value);
+      } catch (error) {
+        // Swallowing this would leave the project running with no limits at
+        // all while the start looked successful.
+        child.kill();
+        await rmdir(cgroup.path).catch(() => {});
+        if (namespace) await run(namespace.destroyCommands()[0]!);
+        throw new Error(
+          "Could not place project '" + spec.project + "' under its resource " +
+            "limits: " + (error instanceof Error ? error.message : String(error)),
+        );
+      }
     }
 
     const handle: RunHandle = {

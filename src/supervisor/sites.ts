@@ -6,7 +6,7 @@
  * failed deploy leaves the previous one serving.
  */
 
-import { mkdir, rename, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { safeExtractPath } from "./unpack";
 
@@ -15,7 +15,7 @@ export type StoredEntry = { name: string; contents: Uint8Array };
 /** What the deploy path needs from storage; a class is one implementation. */
 export interface SiteStorage {
   rootFor(project: string): string;
-  publish(project: string, entries: StoredEntry[]): Promise<void>;
+  publish(project: string, entries: StoredEntry[], uid?: number): Promise<void>;
   remove(project: string): Promise<void>;
 }
 
@@ -32,7 +32,7 @@ export class SiteStore implements SiteStorage {
    * Redeploying the same project overwrites in place rather than accumulating
    * copies, which is what makes a bare "quai" idempotent.
    */
-  async publish(project: string, entries: StoredEntry[]): Promise<void> {
+  async publish(project: string, entries: StoredEntry[], uid?: number): Promise<void> {
     const target = this.rootFor(project);
     const staging = target + ".incoming";
     const previous = target + ".previous";
@@ -63,6 +63,15 @@ export class SiteStore implements SiteStorage {
     }
     await rename(staging, target);
     await rm(previous, { recursive: true, force: true });
+
+    // A static site is served by the supervisor, but it is still a project's
+    // content: without this it stays world-readable and any neighbour can read
+    // it straight off the volume.
+    if (uid !== undefined) {
+      const chown = Bun.spawn(["chown", "-R", uid + ":" + uid, target], { stderr: "pipe" });
+      await chown.exited;
+      await chmod(target, 0o750);
+    }
   }
 
   async remove(project: string): Promise<void> {

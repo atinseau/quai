@@ -6,6 +6,17 @@
 # mount. The supervisor verifies all of this at startup — including really
 # attempting the delegation — and refuses to run rather than offer isolation
 # it cannot enforce.
+#
+# Before the first deploy, add your public key to the state volume:
+#
+#   docker compose exec quai sh -c 'echo "ssh-ed25519 AAAA... you@host" \
+#     >> /srv/quai/state/authorized_keys'
+#   docker compose restart quai
+#
+# Every key is pinned to a forced command, so it can only ever deploy.
+# Then, on your machine:
+#
+#   quai login root@<host> quai.<your-domain>
 
 services:
   quai:
@@ -31,9 +42,19 @@ services:
       - ${QUAI_HOMES_DEVICE:-/srv/quai-homes}:/srv/quai/homes
       - quai-state:/srv/quai/state
 
+    ports:
+      # The deploy channel. Keys are pinned to a forced command, so this port
+      # grants deployment and nothing else.
+      - "${QUAI_SSH_PORT:-2222}:22"
+
     environment:
       QUAI_HOMES: /srv/quai/homes
+      QUAI_STATE: /srv/quai/state
       QUAI_PORT: "8080"
+      # The wildcard zone projects are served under. Point *.quai.<domain> at
+      # this service in Coolify, which terminates TLS with one wildcard
+      # certificate for every project.
+      QUAI_ZONE: ${QUAI_ZONE:-quai.localhost}
 
     healthcheck:
       test: ["CMD", "bun", "-e", "await fetch('http://localhost:8080/health').then(r=>{if(!r.ok)process.exit(1)})"]

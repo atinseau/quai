@@ -35,12 +35,18 @@ RUN chmod -R a+rX /opt/quai/src/hosts
 # The deploy key is pinned to this command, so it can never yield a shell.
 # The deploy key is pinned to this command, so it can never yield a shell.
 COPY deploy/forced-command.sh /usr/local/bin/quai-forced-command
-RUN chmod +x /usr/local/bin/quai-forced-command
+COPY deploy/entrypoint.sh /usr/local/bin/quai-entrypoint
+RUN chmod +x /usr/local/bin/quai-forced-command /usr/local/bin/quai-entrypoint
+
+# sshd only ever runs the forced command; no password, no interactive login.
+RUN printf "PermitRootLogin prohibit-password\nPasswordAuthentication no\nPermitTTY no\nX11Forwarding no\nAllowTcpForwarding no\n" >> /etc/ssh/sshd_config
 
 ENV QUAI_HOMES=/srv/quai/homes
 ENV QUAI_STATE=/srv/quai/state
 ENV QUAI_PORT=8080
 EXPOSE 8080
 
-CMD ["bun", "run", "src/supervisor/main.ts"]
+EXPOSE 22
+
+CMD ["/usr/local/bin/quai-entrypoint"]
 

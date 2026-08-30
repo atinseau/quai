@@ -42,6 +42,15 @@ beforeEach(async () => {
       accounts.push({ project, uid });
     },
     homeFor: (project: string) => join(base, "homes", project),
+    replaceTree: async (staging: string, build: () => Promise<void>) => {
+      const { mkdir, rename, rm } = await import("node:fs/promises");
+      const target = staging.replace(/\.incoming$/, "");
+      await rm(staging, { recursive: true, force: true });
+      await mkdir(staging, { recursive: true });
+      await build();
+      await rm(target, { recursive: true, force: true });
+      await rename(staging, target);
+    },
   };
 });
 
@@ -320,6 +329,56 @@ describe("storage hygiene", () => {
     await deployArchive("site", packTar([entry("index.html", "hi")]), staticSpec, deps);
     const { readdir } = await import("node:fs/promises");
     expect(await readdir(join(base, "sites"))).toContain("site");
+  });
+});
+
+
+describe("a redeploy cannot be redirected by the project", () => {
+  const service = { type: "service" as const, start: "node server.js" };
+
+  test("content is unpacked into a fresh tree, never over the previous one", async () => {
+    // The project owns its home between deploys and could leave a symlink
+    // there. Writing over it would make the supervisor follow it as root and
+    // write wherever it points.
+    const staged: string[] = [];
+    await deployArchive("api", packTar([entry("server.js", "//")]), service, {
+      ...deps,
+      replaceTree: async (staging, build) => {
+        staged.push(staging);
+        const { mkdir } = await import("node:fs/promises");
+        await mkdir(staging, { recursive: true });
+        await build();
+      },
+    });
+    expect(staged[0]!.endsWith(".incoming")).toBe(true);
+  });
+
+  test("a symlink left by a previous deploy is not followed", async () => {
+    const { mkdir, symlink, readFile, writeFile } = await import("node:fs/promises");
+    const outside = join(base, "outside.txt");
+    await writeFile(outside, "untouched");
+
+    const home = join(base, "homes", "api");
+    await mkdir(home, { recursive: true });
+    await symlink(outside, join(home, "server.js"));
+
+    await deployArchive("api", packTar([entry("server.js", "// new code")]), service, deps);
+
+    // The file the symlink pointed at must be exactly as it was.
+    expect(await readFile(outside, "utf8")).toBe("untouched");
+  });
+
+  test("the new deploy is what actually lands in the home", async () => {
+    const { readFile } = await import("node:fs/promises");
+    await deployArchive("api", packTar([entry("server.js", "// new code")]), service, deps);
+    expect(await readFile(join(base, "homes", "api", "server.js"), "utf8")).toBe("// new code");
+  });
+
+  test("a file the project no longer ships disappears", async () => {
+    const { readdir } = await import("node:fs/promises");
+    await deployArchive("api", packTar([entry("server.js", "//"), entry("old.js", "//")]), service, deps);
+    await deployArchive("api", packTar([entry("server.js", "//")]), service, deps);
+    expect(await readdir(join(base, "homes", "api"))).toEqual(["server.js"]);
   });
 });
 
