@@ -428,3 +428,36 @@ describe("declared limits reach the process", () => {
   });
 });
 
+
+describe("a redeploy keeps the home closed", () => {
+  const service = { type: "service" as const, start: "node server.js" };
+
+  test("the home is still 0750 after a redeploy", async () => {
+    // The atomic swap replaces the directory itself, so permissions set when
+    // the account was created do not carry over. Every redeploy silently
+    // reopened the home to every other project.
+    const { mkdir, rename, rm, stat, chmod } = await import("node:fs/promises");
+    const homes = join(base, "homes");
+
+    const withRealSwap = {
+      ...deps,
+      replaceTree: async (staging: string, build: () => Promise<void>) => {
+        const target = staging.replace(/\.incoming$/, "");
+        await rm(staging, { recursive: true, force: true });
+        await mkdir(staging, { recursive: true });
+        await build();
+        await rm(target, { recursive: true, force: true });
+        await rename(staging, target);
+        await chmod(target, 0o750);
+      },
+      homeFor: (project: string) => join(homes, project),
+    };
+
+    await deployArchive("api", packTar([entry("server.js", "//")]), service, withRealSwap);
+    await deployArchive("api", packTar([entry("server.js", "// v2")]), service, withRealSwap);
+
+    const mode = (await stat(join(homes, "api"))).mode & 0o777;
+    expect(mode).toBe(0o750);
+  });
+});
+

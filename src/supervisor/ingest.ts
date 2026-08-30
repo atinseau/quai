@@ -126,6 +126,9 @@ export async function deployArchive(
       }
     });
 
+    // Ownership and quota both follow the swap: the directory that ends up in
+    // place is a different one from the staging tree they would otherwise
+    // describe.
     await deps.chown?.(home, uid);
     await deps.applyQuota?.(project, uid, spec.diskQuota ?? DEFAULT_DISK_QUOTA);
 

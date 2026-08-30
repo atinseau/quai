@@ -6,7 +6,7 @@
  */
 
 import { existsSync } from "node:fs";
-import { mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import {
   createAccount,
@@ -110,6 +110,11 @@ const deployDeps = {
     await rename(target, previous).catch(() => {});
     await rename(staging, target);
     await rm(previous, { recursive: true, force: true });
+
+    // The swap replaces the directory itself, so the 0750 that keeps a
+    // neighbour out has to be restored on the new one. Without this every
+    // redeploy silently reopened the home to every other project.
+    await chmod(target, 0o750);
   },
   chown,
   applyQuota: async (project: string, uid: number, limit: string) => {
