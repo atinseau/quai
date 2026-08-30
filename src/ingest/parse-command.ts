@@ -6,7 +6,11 @@
  * become a shell.
  */
 
-export type DeployRequest = { project: string };
+export type DeployRequest = {
+  project: string;
+  /** Deploy parameters the client encoded, or an empty string. */
+  query: string;
+};
 
 export function parseForcedCommand(requested: string): DeployRequest {
   const parts = requested.trim().split(/\s+/).filter(Boolean);
@@ -20,6 +24,8 @@ export function parseForcedCommand(requested: string): DeployRequest {
     throw new Error(`Invalid project name '${project}'`);
   }
 
-  return { project };
+  // Anything past the project name is an opaque query string; it is parsed
+  // by the supervisor, never executed here.
+  return { project, query: parts[2] ?? "" };
 }
 

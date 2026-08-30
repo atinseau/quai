@@ -24,8 +24,9 @@ function refuse(message: string): never {
 const requested = process.env.SSH_ORIGINAL_COMMAND ?? process.argv.slice(2).join(" ");
 
 let project: string;
+let query: string;
 try {
-  ({ project } = parseForcedCommand(requested));
+  ({ project, query } = parseForcedCommand(requested));
 } catch (error) {
   refuse(error instanceof Error ? error.message : String(error));
 }
@@ -36,7 +37,8 @@ if (archive.length === 0) {
 }
 
 const response = await fetch(
-  `${SUPERVISOR}/_quai/deploy?project=${encodeURIComponent(project)}`,
+  `${SUPERVISOR}/_quai/deploy?project=${encodeURIComponent(project)}` +
+    (query ? "&" + query : ""),
   {
     method: "POST",
     headers: { "x-quai-token": TOKEN, "content-type": "application/x-tar" },
