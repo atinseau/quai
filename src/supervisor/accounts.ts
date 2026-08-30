@@ -3,9 +3,17 @@
  *
  * One account per project is the file-isolation boundary the prototype
  * validated: a project can neither read, list nor write another's home.
+ *
+ * Homes live on the persistent volume rather than in /home. Anything inside
+ * the container disappears when it is recreated, and a project whose code
+ * vanished would come back as an empty account that starts and immediately
+ * dies. The volume is also where the disk quota applies.
  */
 
 import { readFile } from "node:fs/promises";
+
+/** Root of the project homes, on the quota-bearing volume. */
+const HOMES_ROOT = process.env.QUAI_HOMES ?? "/srv/quai/homes";
 
 /** Reads the accounts Quai manages, by project name. */
 export async function readAccounts(): Promise<Map<string, number>> {
@@ -31,9 +39,9 @@ export function accountNameFor(project: string): string {
   return "quai-" + project;
 }
 
-/** The home directory a project's files live in. */
+/** The home directory a project's files live in, on the persistent volume. */
 export function homeFor(project: string): string {
-  return "/home/" + accountNameFor(project);
+  return HOMES_ROOT + "/projects/" + project;
 }
 
 /**
@@ -44,11 +52,17 @@ export function homeFor(project: string): string {
  */
 export async function createAccount(project: string, uid: number): Promise<void> {
   const account = accountNameFor(project);
+  const home = homeFor(project);
 
   const proc = Bun.spawn(
     [
       "useradd",
-      "--create-home",
+      "--home-dir",
+      home,
+      // Never --create-home: on a restart the home already holds the project's
+      // code, and recreating it would silently replace a working deploy with
+      // an empty directory.
+      "--no-create-home",
       "--shell",
       "/usr/sbin/nologin",
       "--uid",
@@ -64,18 +78,30 @@ export async function createAccount(project: string, uid: number): Promise<void>
   if (proc.exitCode !== 0) {
     throw new Error(`useradd failed for ${account}: ${stderr.trim()}`);
   }
+}
 
+/** Ensures a project's home exists and belongs to it, with 0750 permissions. */
+export async function prepareHome(project: string, uid: number): Promise<void> {
+  const home = homeFor(project);
+  const { mkdir, chmod } = await import("node:fs/promises");
+
+  await mkdir(home, { recursive: true });
   // 0750 is what keeps a neighbour from listing or reading the home.
-  const chmod = Bun.spawn(["chmod", "0750", homeFor(project)], { stderr: "pipe" });
-  await chmod.exited;
+  await chmod(home, 0o750);
+
+  const chown = Bun.spawn(["chown", "-R", `${uid}:${uid}`, home], { stderr: "pipe" });
+  await chown.exited;
 }
 
 /** Removes a project's account and home. */
 export async function removeAccount(project: string): Promise<void> {
-  const proc = Bun.spawn(["userdel", "--remove", accountNameFor(project)], {
+  const proc = Bun.spawn(["userdel", accountNameFor(project)], {
     stdout: "pipe",
     stderr: "pipe",
   });
   await proc.exited;
+
+  const { rm } = await import("node:fs/promises");
+  await rm(homeFor(project), { recursive: true, force: true }).catch(() => {});
 }
 

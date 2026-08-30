@@ -299,3 +299,27 @@ describe("functions survive a restart", () => {
   });
 });
 
+
+describe("storage hygiene", () => {
+  test("a service leaves no empty site directory behind", async () => {
+    // Its content lives in the project's home, not under sites/. An empty
+    // directory here would muddy what is actually deployed.
+    const applied: string[] = [];
+    await deployArchive(
+      "api",
+      packTar([entry("server.js", "//")]),
+      { type: "service", start: "node server.js" },
+      { ...deps, applyQuota: async (project) => { applied.push(project); } },
+    );
+    const { readdir } = await import("node:fs/promises");
+    const sites = await readdir(join(base, "sites")).catch(() => []);
+    expect(sites).not.toContain("api");
+  });
+
+  test("a static project still gets its directory", async () => {
+    await deployArchive("site", packTar([entry("index.html", "hi")]), staticSpec, deps);
+    const { readdir } = await import("node:fs/promises");
+    expect(await readdir(join(base, "sites"))).toContain("site");
+  });
+});
+

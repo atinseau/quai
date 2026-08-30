@@ -5,9 +5,16 @@
  * anyway would let projects believe they are contained when they are not.
  */
 
+import { existsSync } from "node:fs";
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { createAccount, homeFor, readAccounts, removeAccount } from "./accounts";
+import {
+  createAccount,
+  homeFor,
+  prepareHome,
+  readAccounts,
+  removeAccount,
+} from "./accounts";
 import { buildHealthReport } from "./health";
 import { deployArchive, type DeploySpec } from "./ingest";
 import { LinuxRunner, SECCOMP_POLICY_PATH } from "./linux-runner";
@@ -69,12 +76,15 @@ const deployDeps = {
   ensureAccount: async (project: string, uid: number) => {
     const accounts = await readAccounts();
     if (!accounts.has(project)) await createAccount(project, uid);
+    await prepareHome(project, uid);
   },
   homeFor,
   chown,
   applyQuota: async (project: string, uid: number, limit: string) => {
     const quota = new ProjectQuota(HOMES, project, uid);
-    await mkdir(join(sitesDirectory, project), { recursive: true });
+    // Only a static project keeps content here; creating the directory for a
+    // service would leave an empty one that muddies what is actually deployed.
+    if (!existsSync(quota.directory)) return;
     for (const command of quota.applyCommands(limit)) {
       const result = await runCommand(command);
       if (!result.ok) {
@@ -93,7 +103,10 @@ const deployDeps = {
 const report = await reconcile(store.list(), {
   existingAccounts: await readAccounts(),
   existingSites: new Set(await readdir(sitesDirectory).catch(() => [])),
-  createAccount,
+  createAccount: async (project: string, uid: number) => {
+    await createAccount(project, uid);
+    await prepareHome(project, uid);
+  },
 });
 const summary = formatReport(report);
 if (summary.length > 0) console.log(summary);
