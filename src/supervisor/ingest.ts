@@ -8,6 +8,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { subdomainOf } from "./naming";
+import { DEFAULT_LIMITS } from "./cgroup";
 import { DEFAULT_DISK_QUOTA } from "./quota";
 import { functionHostFor } from "./function-host";
 import type { Runtime } from "../cli/manifest";
@@ -26,6 +27,10 @@ export type DeploySpec = {
   runtime?: Runtime;
   /** Seconds a function may run before the caller gets a definite answer. */
   timeoutSeconds?: number;
+  /** Resource ceilings the project declared; absent values keep the defaults. */
+  limits?: { memory?: string; cpu?: string; pids?: number };
+  /** Disk ceiling the project declared. */
+  diskQuota?: string;
 };
 
 export type DeployResult = {
@@ -81,7 +86,7 @@ export async function deployArchive(
     // Marking has to follow publication: an atomic publish renames the
     // directory into place, and a rename does not carry the project attribute
     // with it. Marking earlier leaves the content on project 0, uncapped.
-    await deps.applyQuota?.(project, uid, DEFAULT_DISK_QUOTA);
+    await deps.applyQuota?.(project, uid, spec.diskQuota ?? DEFAULT_DISK_QUOTA);
     deps.store.upsertProject({ name: project, type: "static" });
   } else {
     // A function is a handler, not a server: Quai supplies the host that
@@ -122,7 +127,7 @@ export async function deployArchive(
     });
 
     await deps.chown?.(home, uid);
-    await deps.applyQuota?.(project, uid, DEFAULT_DISK_QUOTA);
+    await deps.applyQuota?.(project, uid, spec.diskQuota ?? DEFAULT_DISK_QUOTA);
 
     const internalPort = spec.internalPort ?? 8080;
     deps.store.upsertProject({
@@ -147,6 +152,11 @@ export async function deployArchive(
       internalPort,
       env: { ...deps.store.getEnv(project), ...(host?.env ?? {}) },
       namespaceIndex: deps.store.lookup(project)?.netnsIndex ?? 0,
+      limits: {
+        memory: spec.limits?.memory ?? DEFAULT_LIMITS.memory,
+        cpu: spec.limits?.cpu ?? DEFAULT_LIMITS.cpu,
+        pids: spec.limits?.pids ?? DEFAULT_LIMITS.pids,
+      },
       isolateNetwork: deps.isolateNetwork,
     });
   }

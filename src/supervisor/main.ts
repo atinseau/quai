@@ -188,6 +188,16 @@ Bun.serve({
         return Response.json({ error: "Invalid project name" }, { status: 400 });
       }
 
+      // Limits the project declared. Absent values keep the defaults rather
+      // than being pinned to whatever the client assumed they were.
+      const declaredLimits = {
+        memory: url.searchParams.get("memory") ?? undefined,
+        cpu: url.searchParams.get("cpu") ?? undefined,
+        pids: url.searchParams.has("pids")
+          ? Number(url.searchParams.get("pids"))
+          : undefined,
+      };
+
       const spec: DeploySpec = {
         type: (url.searchParams.get("type") as DeploySpec["type"]) ?? "static",
         start: url.searchParams.get("start") ?? undefined,
@@ -198,7 +208,26 @@ Bun.serve({
         timeoutSeconds: url.searchParams.has("timeout")
           ? Number(url.searchParams.get("timeout"))
           : undefined,
+        limits: declaredLimits,
+        diskQuota: url.searchParams.get("disk") ?? undefined,
       };
+
+      // Variables declared in quai.toml are stored before the deploy, so the
+      // process that starts already has them.
+      const declaredEnv = url.searchParams.get("env");
+      if (declaredEnv !== null) {
+        try {
+          const variables = JSON.parse(declaredEnv) as Record<string, string>;
+          store.transaction(() => {
+            store.upsertProject({ name: project, type: spec.type });
+            for (const [key, value] of Object.entries(variables)) {
+              store.setEnv(project, key, value);
+            }
+          });
+        } catch {
+          return Response.json({ error: "Malformed env declaration" }, { status: 400 });
+        }
+      }
 
       try {
         const archive = new Uint8Array(await request.arrayBuffer());

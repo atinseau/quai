@@ -382,3 +382,49 @@ describe("a redeploy cannot be redirected by the project", () => {
   });
 });
 
+
+describe("declared limits reach the process", () => {
+  const service = { type: "service" as const, start: "node server.js" };
+
+  test("a declared memory limit is applied, not the default", async () => {
+    // Without this the quai.toml is decorative: a project asking for 512Mi
+    // silently runs on the default.
+    await deployArchive("api", packTar([entry("server.js", "//")]), {
+      ...service,
+      limits: { memory: "512Mi" },
+    }, deps);
+    expect(runner.started[0]!.limits?.memory).toBe("512Mi");
+  });
+
+  test("declared cpu and pids limits are applied", async () => {
+    await deployArchive("api", packTar([entry("server.js", "//")]), {
+      ...service,
+      limits: { cpu: "2", pids: 128 },
+    }, deps);
+    expect(runner.started[0]!.limits).toMatchObject({ cpu: "2", pids: 128 });
+  });
+
+  test("an undeclared limit falls back to the default", async () => {
+    await deployArchive("api", packTar([entry("server.js", "//")]), service, deps);
+    expect(runner.started[0]!.limits?.memory).toBe("256Mi");
+  });
+
+  test("a declared disk quota is applied", async () => {
+    let seen = "";
+    await deployArchive("api", packTar([entry("server.js", "//")]), {
+      ...service,
+      diskQuota: "5Gi",
+    }, { ...deps, applyQuota: async (_p, _u, limit) => { seen = limit; } });
+    expect(seen).toBe("5Gi");
+  });
+
+  test("an undeclared quota falls back to the default", async () => {
+    let seen = "";
+    await deployArchive("api", packTar([entry("server.js", "//")]), service, {
+      ...deps,
+      applyQuota: async (_p, _u, limit) => { seen = limit; },
+    });
+    expect(seen).toBe("1Gi");
+  });
+});
+

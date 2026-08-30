@@ -13,6 +13,7 @@ import { collectFiles } from "./collect";
 import { formatEnvFile, isReservedEnvKey, parseEnvAssignment } from "./env";
 import { readConfig, writeConfig } from "./config";
 import { renderQuaiToml } from "./init";
+import { deployQuery } from "./deploy-query";
 import { detectProjectType, resolveDeploySpec, type DeploySpec } from "./manifest";
 import { projectNameFromPath } from "../supervisor/naming";
 import { packTar } from "../supervisor/tar";
@@ -38,7 +39,7 @@ async function runBuild(directory: string, command: string): Promise<void> {
   if (proc.exitCode !== 0) fail("build failed, nothing was deployed");
 }
 
-async function deploy(directory: string): Promise<void> {
+async function deploy(directory: string, production = false): Promise<void> {
   const config = await readConfig();
   if (config === null) {
     fail("not logged in. Run 'quai login <user@host> <zone>' first.");
@@ -66,15 +67,10 @@ async function deploy(directory: string): Promise<void> {
 
   if (files.length === 0) fail(`nothing to deploy in ${source}`);
 
-  console.log(`Deploying ${project} (${spec.type}, ${files.length} files)...`);
+  const target = production ? "production" : spec.type;
+  console.log(`Deploying ${project} (${target}, ${files.length} files)...`);
 
-  const query = new URLSearchParams({ type: spec.type });
-  if (spec.runtime) query.set("runtime", spec.runtime);
-  if (spec.start) query.set("start", spec.start);
-  if (spec.internalPort) query.set("port", String(spec.internalPort));
-  // Always sent, even empty: the server replaces the whole set, so an omitted
-  // parameter would leave a removed domain still serving.
-  query.set("domains", (spec.domains ?? []).join(","));
+  const query = deployQuery(spec, { production });
 
   const archive = packTar(files);
   // The SSH key on the server is pinned to a forced command, so this
@@ -250,9 +246,13 @@ const [command, ...rest] = process.argv.slice(2);
 
 switch (command) {
   case undefined:
-  case "deploy":
-    await deploy(rest[0] ?? process.cwd());
+  case "--prod":
+  case "deploy": {
+    const production = process.argv.includes("--prod");
+    const directory = rest.find((argument) => !argument.startsWith("-")) ?? process.cwd();
+    await deploy(directory, production);
     break;
+  }
   case "init":
     await init(rest[0] ?? process.cwd());
     break;
@@ -277,6 +277,7 @@ switch (command) {
       [
         "Usage:",
         "  quai                      deploy the current directory",
+        "  quai --prod               deploy to the production domain",
         "  quai deploy [dir]         deploy a specific directory",
         "  quai init [dir]           write a quai.toml for this project",
         "  quai env ls|add|rm|pull   manage environment variables",

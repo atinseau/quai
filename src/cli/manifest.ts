@@ -35,7 +35,9 @@ export type Manifest = {
   runtime?: Runtime;
   build?: { command?: string; output?: string };
   service?: { internal_port?: number; start?: string };
-  limits?: { memory?: string; cpu?: string; pids?: number; disk?: string };
+  /** Function timeout, e.g. "30s". */
+  timeout?: string;
+  limits?: { memory?: string; cpu?: string; pids?: number; disk?: string; timeout?: string };
   domains?: { custom?: string[] };
   env?: Record<string, string>;
 };
@@ -49,6 +51,8 @@ export type DeploySpec = {
   limits?: Manifest["limits"];
   domains?: string[];
   env?: Record<string, string>;
+  /** Seconds a function may run before the caller gets a definite answer. */
+  timeoutSeconds?: number;
 };
 
 /** Marker files, most specific first. */
@@ -128,6 +132,19 @@ export function parseQuaiToml(source: string): Manifest {
  *
  * @throws with an actionable message when neither can answer.
  */
+/** Reads a duration such as "30s" or "2m" into seconds. */
+export function parseDuration(value: string | undefined): number | undefined {
+  if (value === undefined) return undefined;
+
+  const match = /^(\d+)\s*(s|m)?$/.exec(value.trim());
+  if (match === null) {
+    throw new Error(`Invalid duration '${value}'. Use a form like 30s or 2m.`);
+  }
+
+  const amount = Number(match[1]);
+  return match[2] === "m" ? amount * 60 : amount;
+}
+
 export function resolveDeploySpec(files: Set<string>, manifestSource: string | null): DeploySpec {
   const manifest = manifestSource === null ? null : parseQuaiToml(manifestSource);
   const detected = manifest === null ? detectProjectType(files) : null;
@@ -161,6 +178,7 @@ export function resolveDeploySpec(files: Set<string>, manifestSource: string | n
     limits: manifest?.limits,
     domains: manifest?.domains?.custom,
     env: manifest?.env,
+    timeoutSeconds: parseDuration(manifest?.limits?.timeout ?? manifest?.timeout),
   };
 }
 
