@@ -15,6 +15,7 @@ import { join } from "node:path";
 import { accountNameFor } from "./accounts";
 import { DEFAULT_LIMITS, ProjectCgroup, type Limits } from "./cgroup";
 import { containerCgroupPath } from "./cgroup-path";
+import { EgressPolicy, natCommands, natInstallCommand } from "./egress";
 import { NetworkNamespace, allocateSubnet } from "./netns";
 import type { RunHandle, RunSpec, RunState, Runner } from "./runner";
 
@@ -35,6 +36,7 @@ async function run(argv: string[]): Promise<{ ok: boolean; stderr: string }> {
 export class LinuxRunner implements Runner {
   private processes = new Map<string, Running>();
   private delegated = false;
+  private natReady = false;
 
   /** Builds the argv that drops to the project's account before exec. */
   protected buildArgv(spec: RunSpec, namespace: NetworkNamespace | null): string[] {
@@ -103,6 +105,22 @@ export class LinuxRunner implements Runner {
     return cgroup;
   }
 
+  /**
+   * Enables masquerading once, so projects can reach the public internet.
+   *
+   * The rule is checked before being added: without that, every restart would
+   * append a duplicate.
+   */
+  private async ensureNat(): Promise<void> {
+    if (this.natReady) return;
+
+    const [forward, check] = natCommands();
+    await run(forward!);
+    const exists = await run(check!);
+    if (!exists.ok) await run(natInstallCommand());
+    this.natReady = true;
+  }
+
   /** Builds the project's namespace, replacing any leftover of the same name. */
   private async createNamespace(spec: RunSpec): Promise<NetworkNamespace> {
     const namespace = new NetworkNamespace(
@@ -110,6 +128,8 @@ export class LinuxRunner implements Runner {
       allocateSubnet(spec.namespaceIndex ?? 0),
       spec.internalPort,
     );
+
+    await this.ensureNat();
 
     // A previous run may have left one behind; deleting first keeps a restart
     // from failing on a name that already exists.
@@ -125,7 +145,34 @@ export class LinuxRunner implements Runner {
       }
     }
 
+    await this.applyEgressPolicy(namespace);
     return namespace;
+  }
+
+  /**
+   * Fences the project in: the internet stays open, neighbours and the
+   * operator's private network do not.
+   *
+   * A namespace that cannot be fenced is torn down rather than left running,
+   * since a project reaching its neighbours is worse than one that fails to
+   * start.
+   */
+  private async applyEgressPolicy(namespace: NetworkNamespace): Promise<void> {
+    const policy = new EgressPolicy(
+      namespace.name,
+      namespace.subnet,
+      "qh-" + namespace.project,
+    );
+
+    for (const rule of policy.rules()) {
+      const result = await run(rule);
+      if (!result.ok) {
+        await run(namespace.destroyCommands()[0]!);
+        throw new Error(
+          "Could not fence project '" + namespace.project + "': " + result.stderr,
+        );
+      }
+    }
   }
 
   async start(spec: RunSpec): Promise<RunHandle> {
