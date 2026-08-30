@@ -1,15 +1,20 @@
 /**
  * The Linux implementation of the Runner seam.
  *
- * A project's process runs under its own UNIX account and inside its own
- * network namespace, so the file isolation the prototype validated applies to
- * the running service, and its listening port belongs to it alone.
+ * A project's process runs under its own UNIX account, inside its own network
+ * namespace, and within its own cgroup. So the file isolation the prototype
+ * validated applies to the running service, its listening port belongs to it
+ * alone, and a runaway is contained without taking its neighbours down.
  *
- * Later tickets extend this same class with cgroup limits and seccomp
- * confinement. Nothing above the seam changes when they land.
+ * A later ticket adds seccomp confinement to this same class. Nothing above
+ * the seam changes when it lands.
  */
 
+import { mkdir, rmdir, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { accountNameFor } from "./accounts";
+import { DEFAULT_LIMITS, ProjectCgroup, type Limits } from "./cgroup";
+import { containerCgroupPath } from "./cgroup-path";
 import { NetworkNamespace, allocateSubnet } from "./netns";
 import type { RunHandle, RunSpec, RunState, Runner } from "./runner";
 
@@ -17,6 +22,7 @@ type Running = {
   handle: RunHandle;
   process: Bun.Subprocess;
   namespace: NetworkNamespace | null;
+  cgroup: ProjectCgroup | null;
 };
 
 async function run(argv: string[]): Promise<{ ok: boolean; stderr: string }> {
@@ -28,6 +34,7 @@ async function run(argv: string[]): Promise<{ ok: boolean; stderr: string }> {
 
 export class LinuxRunner implements Runner {
   private processes = new Map<string, Running>();
+  private delegated = false;
 
   /** Builds the argv that drops to the project's account before exec. */
   protected buildArgv(spec: RunSpec, namespace: NetworkNamespace | null): string[] {
@@ -61,6 +68,41 @@ export class LinuxRunner implements Runner {
     return namespace === null ? launch : namespace.wrapCommand(launch);
   }
 
+  /**
+   * Enables the controllers Quai needs on the container's subtree, once.
+   *
+   * The supervisor steps into a leaf of its own first: a cgroup cannot both
+   * hold processes and delegate controllers to its children.
+   */
+  private async ensureDelegation(cgroup: ProjectCgroup): Promise<void> {
+    if (this.delegated) return;
+
+    await mkdir(cgroup.supervisorLeaf, { recursive: true });
+    await writeFile(join(cgroup.supervisorLeaf, "cgroup.procs"), String(process.pid)).catch(
+      () => {},
+    );
+
+    const write = cgroup.delegationWrite();
+    await writeFile(join(cgroup.containerCgroup, write.file), write.value);
+    this.delegated = true;
+  }
+
+  /** Builds the project's cgroup and applies its limits. */
+  private async createCgroup(spec: RunSpec): Promise<ProjectCgroup> {
+    const cgroup = new ProjectCgroup(await containerCgroupPath(), spec.project);
+    await this.ensureDelegation(cgroup);
+    await mkdir(cgroup.path, { recursive: true });
+
+    for (const write of cgroup.limitWrites(spec.limits ?? DEFAULT_LIMITS)) {
+      // swap control is absent on some kernels; the memory cap still holds.
+      await writeFile(join(cgroup.path, write.file), write.value).catch((error) => {
+        if (write.file !== "memory.swap.max") throw error;
+      });
+    }
+
+    return cgroup;
+  }
+
   /** Builds the project's namespace, replacing any leftover of the same name. */
   private async createNamespace(spec: RunSpec): Promise<NetworkNamespace> {
     const namespace = new NetworkNamespace(
@@ -92,6 +134,7 @@ export class LinuxRunner implements Runner {
     }
 
     const namespace = spec.isolateNetwork === false ? null : await this.createNamespace(spec);
+    const cgroup = spec.limitResources === false ? null : await this.createCgroup(spec);
 
     const child = Bun.spawn(this.buildArgv(spec, namespace), {
       cwd: spec.home,
@@ -104,6 +147,13 @@ export class LinuxRunner implements Runner {
       throw new Error(`Could not start project '${spec.project}'`);
     }
 
+    // Moving the pid in after spawn is what actually enforces the limits; the
+    // cgroup files alone constrain nothing until a process lives there.
+    if (cgroup !== null) {
+      const attach = cgroup.attachWrite(child.pid);
+      await writeFile(join(cgroup.path, attach.file), attach.value).catch(() => {});
+    }
+
     const handle: RunHandle = {
       project: spec.project,
       pid: child.pid,
@@ -111,7 +161,7 @@ export class LinuxRunner implements Runner {
       // Requests reach the service at its own end of the veth pair.
       address: namespace?.subnet.projectAddress ?? "127.0.0.1",
     };
-    this.processes.set(spec.project, { handle, process: child, namespace });
+    this.processes.set(spec.project, { handle, process: child, namespace, cgroup });
     return handle;
   }
 
@@ -126,6 +176,8 @@ export class LinuxRunner implements Runner {
     // Removing the namespace takes the veth pair with it, so nothing leaks
     // between deploys.
     if (running.namespace) await run(running.namespace.destroyCommands()[0]!);
+    // A cgroup is a kernel directory: rmdir removes it, a recursive rm does not.
+    if (running.cgroup) await rmdir(running.cgroup.path).catch(() => {});
   }
 
   async status(project: string): Promise<RunState> {
@@ -152,4 +204,6 @@ export class LinuxRunner implements Runner {
     return this.processes.get(project)?.process ?? null;
   }
 }
+
+export type { Limits };
 

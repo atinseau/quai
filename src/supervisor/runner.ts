@@ -21,6 +21,10 @@ export type RunSpec = {
   namespaceIndex?: number;
   /** Set false only where namespaces are unavailable, such as in tests. */
   isolateNetwork?: boolean;
+  /** Resource ceilings; defaults apply when absent. */
+  limits?: { memory: string; cpu: string; pids: number };
+  /** Set false only where cgroups are unavailable, such as in tests. */
+  limitResources?: boolean;
 };
 
 export type RunHandle = {

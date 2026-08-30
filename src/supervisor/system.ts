@@ -6,10 +6,11 @@
  * reading — cgroup delegation — is established by attempting it for real.
  */
 
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rmdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { DelegationOutcome, SystemProbe } from "./preflight";
 import { decodeCapabilities, findMountFor, parseCgroupPath } from "./parsers";
+import { containerRootOf } from "./cgroup-path";
 
 const CGROUP_ROOT = "/sys/fs/cgroup";
 
@@ -36,7 +37,9 @@ function effectiveCapabilities(status: string): string[] {
  * controllers, then confirms a child cgroup accepts a limit.
  */
 export async function attemptDelegation(cgroupPath: string): Promise<DelegationOutcome> {
-  const base = join(CGROUP_ROOT, cgroupPath);
+  // Strip any leaf a previous relocation left, so preflight and runner agree
+  // on the same parent instead of nesting one inside the other.
+  const base = CGROUP_ROOT + containerRootOf(cgroupPath);
 
   try {
     await mkdir(join(base, "quai-supervisor"), { recursive: true });
@@ -55,6 +58,11 @@ export async function attemptDelegation(cgroupPath: string): Promise<DelegationO
         detail: `memory.max did not hold its value (read back "${readBack}")`,
       };
     }
+
+    // Leave nothing behind: the probe cgroup would otherwise linger next to
+    // the real projects. A cgroup is a kernel directory, so it is removed with
+    // rmdir; a recursive rm does not delete it.
+    await rmdir(probe).catch(() => {});
 
     return { attempted: true, succeeded: true, detail: "delegated memory, cpu and pids" };
   } catch (error) {
