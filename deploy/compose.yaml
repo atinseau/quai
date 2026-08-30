@@ -1,0 +1,45 @@
+# Quai — paste this into Coolify as a Raw Compose deployment.
+#
+# The three settings below are not optional. The prototype established that
+# without 'cgroup: host' a memory cap is written without error and contains
+# nothing, and that 'privileged: true' does NOT substitute for the explicit
+# cgroup mount. The supervisor verifies all of this at startup and refuses to
+# run rather than offer isolation it cannot enforce.
+
+services:
+  quai:
+    build: .
+    restart: unless-stopped
+
+    # Lets the container see its real cgroup path and place projects under it.
+    cgroup: host
+
+    cap_add:
+      - NET_ADMIN # per-project network namespaces and egress rules
+      - SYS_ADMIN # namespace creation and mount operations
+
+    volumes:
+      - /sys/fs/cgroup:/sys/fs/cgroup:rw
+      # Project homes MUST sit on an XFS volume mounted with prjquota:
+      # overlayfs cannot carry per-project disk quotas.
+      - quai-homes:/srv/quai/homes
+      - quai-state:/srv/quai/state
+
+    environment:
+      QUAI_HOMES: /srv/quai/homes
+      QUAI_PORT: "8080"
+
+    healthcheck:
+      test: ["CMD", "bun", "-e", "await fetch('http://localhost:8080/health').then(r=>{if(!r.ok)process.exit(1)})"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  quai-homes:
+    driver_opts:
+      type: xfs
+      o: prjquota
+  quai-state:
+
