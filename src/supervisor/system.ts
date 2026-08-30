@@ -1,11 +1,17 @@
 /**
- * Reads the host facts from /proc and /sys. This is the impure edge that feeds
- * the pure probe parser; everything testable lives in probe.ts.
+ * Reads the isolation facts from the running system.
+ *
+ * This is the impure edge: every format it reads is parsed by the pure
+ * functions in parsers.ts, and the one guarantee that cannot be established by
+ * reading — cgroup delegation — is established by attempting it for real.
  */
 
-import { readFile } from "node:fs/promises";
-import { statfs } from "node:fs/promises";
-import type { RawSystemReadings } from "./probe";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import type { DelegationOutcome, SystemProbe } from "./preflight";
+import { decodeCapabilities, findMountFor, parseCgroupPath } from "./parsers";
+
+const CGROUP_ROOT = "/sys/fs/cgroup";
 
 async function read(path: string): Promise<string> {
   try {
@@ -15,49 +21,84 @@ async function read(path: string): Promise<string> {
   }
 }
 
-/** Finds the mount options for a mount point in /proc/mounts. */
-async function mountOptionsFor(target: string): Promise<{ type: string; options: string }> {
-  const mounts = await read("/proc/mounts");
-  for (const line of mounts.split("\n")) {
-    const [, mountPoint, type, options] = line.split(/\s+/);
-    if (mountPoint === target) return { type: type ?? "", options: options ?? "" };
+/** Reads the capabilities the process can actually exercise, not merely hold. */
+function effectiveCapabilities(status: string): string[] {
+  const line = status.split("\n").find((l) => l.startsWith("CapEff:"));
+  return decodeCapabilities(line?.split(/\s+/)[1] ?? "");
+}
+
+/**
+ * Proves that controllers can be delegated to a child cgroup, by doing it.
+ *
+ * No static reading establishes this. A cgroup cannot both hold processes and
+ * delegate controllers to its children — the "no internal process" rule — so
+ * the supervisor first steps into a leaf of its own, then enables the
+ * controllers, then confirms a child cgroup accepts a limit.
+ */
+export async function attemptDelegation(cgroupPath: string): Promise<DelegationOutcome> {
+  const base = join(CGROUP_ROOT, cgroupPath);
+
+  try {
+    await mkdir(join(base, "quai-supervisor"), { recursive: true });
+    await writeFile(join(base, "quai-supervisor", "cgroup.procs"), String(process.pid));
+    await writeFile(join(base, "cgroup.subtree_control"), "+memory +cpu +pids");
+
+    const probe = join(base, "quai-preflight");
+    await mkdir(probe, { recursive: true });
+    await writeFile(join(probe, "memory.max"), "67108864");
+    const readBack = (await read(join(probe, "memory.max"))).trim();
+
+    if (readBack !== "67108864") {
+      return {
+        attempted: true,
+        succeeded: false,
+        detail: `memory.max did not hold its value (read back "${readBack}")`,
+      };
+    }
+
+    return { attempted: true, succeeded: true, detail: "delegated memory, cpu and pids" };
+  } catch (error) {
+    return {
+      attempted: true,
+      succeeded: false,
+      detail: error instanceof Error ? error.message : String(error),
+    };
   }
-  return { type: "", options: "" };
 }
 
-/** Capabilities are exposed as a hex bitmask; decode the ones we require. */
-const CAPABILITY_BITS: Record<string, bigint> = {
-  NET_ADMIN: 1n << 12n,
-  SYS_ADMIN: 1n << 21n,
-};
+/** Gathers every fact the preflight judges. */
+export async function readSystem(homesPath: string): Promise<SystemProbe> {
+  const [selfCgroup, controllers, mounts, status] = await Promise.all([
+    read("/proc/self/cgroup"),
+    read(join(CGROUP_ROOT, "cgroup.controllers")),
+    read("/proc/mounts"),
+    read("/proc/self/status"),
+  ]);
 
-async function boundingSet(): Promise<string[]> {
-  const status = await read("/proc/self/status");
-  const line = status.split("\n").find((l) => l.startsWith("CapBnd:"));
-  if (!line) return [];
-  const mask = BigInt("0x" + (line.split(/\s+/)[1] ?? "0"));
-  return Object.entries(CAPABILITY_BITS)
-    .filter(([, bit]) => (mask & bit) !== 0n)
-    .map(([name]) => name);
-}
+  const cgroupPath = parseCgroupPath(selfCgroup);
+  const cgroupMount = findMountFor(mounts, CGROUP_ROOT);
+  const homesMount = findMountFor(mounts, homesPath);
+  const cgroupWritable = cgroupMount.options.split(",").includes("rw");
 
-export async function readSystem(homesPath: string): Promise<RawSystemReadings> {
-  const [selfCgroup, cgroupControllers, cgroupMount, homesMount, capabilityBoundingSet] =
-    await Promise.all([
-      read("/proc/self/cgroup"),
-      read("/sys/fs/cgroup/cgroup.controllers"),
-      mountOptionsFor("/sys/fs/cgroup"),
-      mountOptionsFor(homesPath),
-      boundingSet(),
-    ]);
+  // Only worth attempting once the prerequisites are in place; otherwise the
+  // failure would just restate what the static checks already report.
+  const canAttempt = cgroupPath !== "/" && cgroupWritable;
+  const cgroupDelegation = canAttempt
+    ? await attemptDelegation(cgroupPath)
+    : {
+        attempted: false,
+        succeeded: false,
+        detail: "skipped because the cgroup namespace or mount is unusable",
+      };
 
   return {
-    selfCgroup,
-    cgroupControllers,
-    cgroupMountOptions: cgroupMount.options,
-    homesFilesystemType: homesMount.type,
-    homesMountOptions: homesMount.options,
-    capabilityBoundingSet,
+    cgroupNamespace: cgroupPath === "/" ? "private" : "host",
+    cgroupControllers: controllers.trim().split(/\s+/).filter(Boolean),
+    cgroupWritable,
+    cgroupDelegation,
+    homesFilesystem: homesMount.type.toLowerCase(),
+    projectQuotasEnabled: homesMount.options.split(",").includes("prjquota"),
+    capabilities: effectiveCapabilities(status),
   };
 }
 

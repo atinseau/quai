@@ -1,14 +1,17 @@
 # Quai — paste this into Coolify as a Raw Compose deployment.
 #
-# The three settings below are not optional. The prototype established that
-# without 'cgroup: host' a memory cap is written without error and contains
-# nothing, and that 'privileged: true' does NOT substitute for the explicit
-# cgroup mount. The supervisor verifies all of this at startup and refuses to
-# run rather than offer isolation it cannot enforce.
+# The settings below are not optional. The prototype established that without
+# 'cgroup: host' a memory cap is written without error and contains nothing,
+# and that 'privileged: true' does NOT substitute for the explicit cgroup
+# mount. The supervisor verifies all of this at startup — including really
+# attempting the delegation — and refuses to run rather than offer isolation
+# it cannot enforce.
 
 services:
   quai:
-    build: .
+    # A pasted Raw Compose carries no build context, so Quai is deployed from a
+    # published image. Build locally with: docker build -t quai:local .
+    image: ${QUAI_IMAGE:-ghcr.io/atinseau/quai:latest}
     restart: unless-stopped
 
     # Lets the container see its real cgroup path and place projects under it.
@@ -20,9 +23,12 @@ services:
 
     volumes:
       - /sys/fs/cgroup:/sys/fs/cgroup:rw
-      # Project homes MUST sit on an XFS volume mounted with prjquota:
-      # overlayfs cannot carry per-project disk quotas.
-      - quai-homes:/srv/quai/homes
+      # Project homes MUST sit on an XFS filesystem mounted with prjquota.
+      # overlayfs cannot carry per-project disk quotas, so this has to be a
+      # bind mount onto a real XFS volume prepared on the host:
+      #   mkfs.xfs /dev/<device>
+      #   mount -o prjquota /dev/<device> /srv/quai-homes
+      - ${QUAI_HOMES_DEVICE:-/srv/quai-homes}:/srv/quai/homes
       - quai-state:/srv/quai/state
 
     environment:
@@ -37,9 +43,5 @@ services:
       start_period: 10s
 
 volumes:
-  quai-homes:
-    driver_opts:
-      type: xfs
-      o: prjquota
   quai-state:
 

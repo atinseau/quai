@@ -6,18 +6,16 @@
  */
 
 import { checkIsolationSupport, formatFailures } from "./preflight";
-import { parseProbe } from "./probe";
 import { readRuntimes, readSystem } from "./system";
 import { buildHealthReport } from "./health";
 
 const HOMES_PATH = process.env.QUAI_HOMES ?? "/srv/quai/homes";
 const PORT = Number(process.env.QUAI_PORT ?? 8080);
-const SKIP_PREFLIGHT = process.env.QUAI_SKIP_PREFLIGHT === "1";
 
-const isolation = checkIsolationSupport(parseProbe(await readSystem(HOMES_PATH)));
+const isolation = checkIsolationSupport(await readSystem(HOMES_PATH));
 const runtimes = await readRuntimes();
 
-if (!isolation.supported && !SKIP_PREFLIGHT) {
+if (!isolation.supported) {
   console.error(formatFailures(isolation.failures));
   process.exit(1);
 }

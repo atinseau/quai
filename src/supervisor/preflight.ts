@@ -6,7 +6,20 @@
  * memory cap can be written without any error and still contain nothing when
  * the container runs in a private cgroup namespace. A project would believe it
  * is capped while its neighbours stay exposed.
+ *
+ * Static indicators alone cannot establish this. Every signal can look correct
+ * while delegation still fails, so the supervisor proves the guarantee by
+ * actually performing the delegation and reports the result here.
  */
+
+/** Outcome of really attempting cgroup delegation, not merely inspecting it. */
+export type DelegationOutcome = {
+  /** Whether the supervisor tried. An untried delegation proves nothing. */
+  attempted: boolean;
+  succeeded: boolean;
+  /** The underlying system message, surfaced so an operator can act on it. */
+  detail: string;
+};
 
 export type SystemProbe = {
   /** Cgroup namespace mode. Only "host" lets the container see its real path. */
@@ -15,11 +28,13 @@ export type SystemProbe = {
   cgroupControllers: string[];
   /** Whether /sys/fs/cgroup is mounted read-write. */
   cgroupWritable: boolean;
+  /** Result of really delegating controllers to a child cgroup. */
+  cgroupDelegation: DelegationOutcome;
   /** Filesystem backing the project homes. */
   homesFilesystem: string;
   /** Whether that filesystem carries project quotas. */
   projectQuotasEnabled: boolean;
-  /** Effective capabilities of the container. */
+  /** Capabilities the container can actually exercise. */
   capabilities: string[];
 };
 
@@ -27,6 +42,7 @@ export type Requirement =
   | "cgroup-namespace"
   | "cgroup-writable"
   | "cgroup-controllers"
+  | "cgroup-delegation"
   | "disk-quotas"
   | "capabilities";
 
@@ -47,6 +63,13 @@ export type PreflightResult = {
 
 const REQUIRED_CONTROLLERS = ["memory", "cpu", "pids"] as const;
 const REQUIRED_CAPABILITIES = ["NET_ADMIN", "SYS_ADMIN"] as const;
+
+/**
+ * XFS is the only filesystem Quai provisions and tests project quotas against.
+ * ext4 project quotas exist, but accepting them would promise a guarantee
+ * nobody has verified on this platform.
+ */
+const REQUIRED_HOMES_FILESYSTEM = "xfs";
 
 /**
  * Checks every isolation requirement and reports all failures at once.
@@ -96,15 +119,34 @@ export function checkIsolationSupport(probe: SystemProbe): PreflightResult {
     });
   }
 
-  if (!probe.projectQuotasEnabled) {
+  if (!probe.cgroupDelegation.attempted || !probe.cgroupDelegation.succeeded) {
+    failures.push({
+      requirement: "cgroup-delegation",
+      guarantee: "Limits written for a project genuinely contain its processes",
+      observed: probe.cgroupDelegation.attempted
+        ? `delegation attempt failed: ${probe.cgroupDelegation.detail}`
+        : `delegation was never attempted: ${probe.cgroupDelegation.detail}`,
+      remedy:
+        "The supervisor must be able to move itself into a leaf cgroup and then " +
+        "write 'cgroup.subtree_control'. A cgroup cannot both hold processes and " +
+        "delegate controllers to its children (the 'no internal process' rule), " +
+        "so check the container is not pinned to a populated cgroup.",
+    });
+  }
+
+  const filesystem = probe.homesFilesystem.toLowerCase();
+  if (filesystem !== REQUIRED_HOMES_FILESYSTEM || !probe.projectQuotasEnabled) {
     failures.push({
       requirement: "disk-quotas",
       guarantee: "One project cannot fill the disk shared by all the others",
-      observed: `homes are on ${probe.homesFilesystem} without project quotas`,
+      observed:
+        filesystem === REQUIRED_HOMES_FILESYSTEM
+          ? "homes are on xfs but without project quotas enabled"
+          : `homes are on '${probe.homesFilesystem || "an unknown filesystem"}', not xfs`,
       remedy:
         "Mount an XFS volume with the 'prjquota' option for the project homes. " +
-        "overlayfs cannot carry quotas, so a bind mount onto the container " +
-        "filesystem will not do.",
+        "overlayfs cannot carry quotas at all, and other filesystems are not " +
+        "verified against Quai's quota handling.",
     });
   }
 
