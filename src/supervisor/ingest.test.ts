@@ -1,23 +1,26 @@
 import { describe, expect, test, beforeEach } from "bun:test";
+import { Database } from "bun:sqlite";
 import { mkdtemp, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { deployArchive } from "./ingest";
-import { Registry } from "./registry";
 import { SiteStore } from "./sites";
+import { Store } from "./store";
 import { packTar } from "./tar";
 
 const encoder = new TextEncoder();
 const entry = (name: string, body: string) => ({ name, contents: encoder.encode(body) });
 
-let deps: { store: SiteStore; registry: Registry; zone: string };
+let deps: { sites: SiteStore; store: Store; zone: string };
 let base: string;
 
 beforeEach(async () => {
   base = await mkdtemp(join(tmpdir(), "quai-ingest-"));
-  const registry = new Registry(join(base, "state.json"));
-  await registry.load();
-  deps = { store: new SiteStore(join(base, "sites")), registry, zone: "quai.example.com" };
+  deps = {
+    sites: new SiteStore(join(base, "sites")),
+    store: new Store(new Database(":memory:")),
+    zone: "quai.example.com",
+  };
 });
 
 describe("deploying an archive", () => {
@@ -28,26 +31,33 @@ describe("deploying an archive", () => {
       deps,
     );
     expect(result.url).toBe("https://my-site.quai.example.com");
-    const body = await readFile(join(deps.store.rootFor("my-site"), "index.html"), "utf8");
+    const body = await readFile(join(deps.sites.rootFor("my-site"), "index.html"), "utf8");
     expect(body).toBe("<h1>hi</h1>");
   });
 
   test("the project becomes routable", async () => {
     await deployArchive("my-site", packTar([entry("index.html", "hi")]), deps);
-    expect(deps.registry.lookup("my-site")).toMatchObject({ name: "my-site", type: "static" });
+    expect(deps.store.lookup("my-site")).toMatchObject({ name: "my-site", type: "static" });
   });
 
   test("a static deploy is recorded as static, so no process is ever started", async () => {
     await deployArchive("my-site", packTar([entry("index.html", "hi")]), deps);
-    expect(deps.registry.lookup("my-site")!.type).toBe("static");
+    expect(deps.store.lookup("my-site")!.type).toBe("static");
+  });
+
+  test("a project keeps its uid across redeploys", async () => {
+    await deployArchive("my-site", packTar([entry("index.html", "v1")]), deps);
+    const uid = deps.store.lookup("my-site")!.uid;
+    await deployArchive("my-site", packTar([entry("index.html", "v2")]), deps);
+    expect(deps.store.lookup("my-site")!.uid).toBe(uid);
   });
 
   test("redeploying replaces the content without duplicating the project", async () => {
     await deployArchive("my-site", packTar([entry("index.html", "v1")]), deps);
     await deployArchive("my-site", packTar([entry("index.html", "v2")]), deps);
-    const body = await readFile(join(deps.store.rootFor("my-site"), "index.html"), "utf8");
+    const body = await readFile(join(deps.sites.rootFor("my-site"), "index.html"), "utf8");
     expect(body).toBe("v2");
-    expect(deps.registry.list()).toHaveLength(1);
+    expect(deps.store.list()).toHaveLength(1);
   });
 
   test("an empty archive is refused rather than publishing an empty site", async () => {
@@ -61,14 +71,24 @@ describe("deploying an archive", () => {
 
   test("a refused deploy does not register the project", async () => {
     await deployArchive("my-site", packTar([entry("../evil", "x")]), deps).catch(() => {});
-    expect(deps.registry.lookup("my-site")).toBeNull();
+    expect(deps.store.lookup("my-site")).toBeNull();
   });
 
-  test("the registry survives a reload, so projects outlive a restart", async () => {
-    await deployArchive("my-site", packTar([entry("index.html", "hi")]), deps);
-    const reloaded = new Registry(join(base, "state.json"));
-    await reloaded.load();
-    expect(reloaded.lookup("my-site")).toMatchObject({ name: "my-site" });
+  test("concurrent deploys of different projects both land", async () => {
+    await Promise.all([
+      deployArchive("alpha", packTar([entry("index.html", "a")]), deps),
+      deployArchive("beta", packTar([entry("index.html", "b")]), deps),
+    ]);
+    expect(deps.store.list().map((p) => p.name)).toEqual(["alpha", "beta"]);
+  });
+
+  test("concurrent deploys never share a uid", async () => {
+    await Promise.all([
+      deployArchive("alpha", packTar([entry("index.html", "a")]), deps),
+      deployArchive("beta", packTar([entry("index.html", "b")]), deps),
+    ]);
+    const uids = deps.store.list().map((p) => p.uid);
+    expect(new Set(uids).size).toBe(2);
   });
 });
 

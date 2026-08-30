@@ -5,14 +5,16 @@
  * anyway would let projects believe they are contained when they are not.
  */
 
-import { readFile } from "node:fs/promises";
+import { mkdir, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { buildHealthReport } from "./health";
 import { deployArchive } from "./ingest";
 import { checkIsolationSupport, formatFailures } from "./preflight";
-import { Registry } from "./registry";
+import { formatReport, reconcile } from "./reconcile";
 import { handleRequest } from "./router";
 import { SiteStore } from "./sites";
+import { openStore } from "./store";
+import { readAccounts, createAccount } from "./accounts";
 import { readRuntimes, readSystem } from "./system";
 
 const HOMES = process.env.QUAI_HOMES ?? "/srv/quai/homes";
@@ -29,9 +31,22 @@ if (!isolation.supported) {
   process.exit(1);
 }
 
-const store = new SiteStore(join(HOMES, "sites"));
-const registry = new Registry(join(STATE, "projects.json"));
-await registry.load();
+const sitesDirectory = join(HOMES, "sites");
+await mkdir(sitesDirectory, { recursive: true });
+await mkdir(STATE, { recursive: true });
+
+const sites = new SiteStore(sitesDirectory);
+const store = openStore(join(STATE, "quai.db"));
+
+// Accounts, cgroups and namespaces do not survive the container being
+// recreated, so rebuild them from the database before serving anything.
+const report = await reconcile(store.list(), {
+  existingAccounts: await readAccounts(),
+  existingSites: new Set(await readdir(sitesDirectory).catch(() => [])),
+  createAccount,
+});
+const summary = formatReport(report);
+if (summary.length > 0) console.log(summary);
 
 const health = buildHealthReport({ isolation, runtimes });
 
@@ -56,7 +71,7 @@ Bun.serve({
 
       try {
         const archive = new Uint8Array(await request.arrayBuffer());
-        const result = await deployArchive(project, archive, { store, registry, zone: ZONE });
+        const result = await deployArchive(project, archive, { sites, store, zone: ZONE });
         return Response.json(result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -67,8 +82,8 @@ Bun.serve({
     return handleRequest(request, {
       zone: ZONE,
       health,
-      lookup: (project) => registry.lookup(project),
-      rootFor: (project) => store.rootFor(project),
+      lookup: (project) => store.lookup(project),
+      rootFor: (project) => sites.rootFor(project),
       readFile: async (_root, path) => {
         try {
           return new Uint8Array(await readFile(path));
@@ -82,5 +97,5 @@ Bun.serve({
 
 const versions = runtimes.map((r) => `${r.name} ${r.version ?? "absent"}`).join(", ");
 console.log(`quai supervisor on :${PORT} — zone ${ZONE} — runtimes: ${versions}`);
-console.log(`${registry.list().length} project(s) restored`);
+console.log(`${store.list().length} project(s) restored`);
 
