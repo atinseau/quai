@@ -8,6 +8,7 @@ const project = (name: string, uid: number): StoredProject => ({
   uid,
   internalPort: null,
   command: null,
+  netnsIndex: 0,
 });
 
 function systemWith(overrides: Partial<SystemState> = {}): SystemState {

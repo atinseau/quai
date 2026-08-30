@@ -17,12 +17,18 @@ export type RunSpec = {
   /** The port the process listens on inside its own namespace. */
   internalPort: number;
   env: Record<string, string>;
+  /** Position used to derive the project's veth subnet. */
+  namespaceIndex?: number;
+  /** Set false only where namespaces are unavailable, such as in tests. */
+  isolateNetwork?: boolean;
 };
 
 export type RunHandle = {
   project: string;
   pid: number;
   port: number;
+  /** Where the supervisor reaches this project. */
+  address?: string;
 };
 
 export type RunState =

@@ -39,7 +39,8 @@ await mkdir(STATE, { recursive: true });
 
 const sites = new SiteStore(sitesDirectory);
 const store = openStore(join(STATE, "quai.db"));
-const projects = new ProjectSupervisor(new LinuxRunner());
+const runner = new LinuxRunner();
+const projects = new ProjectSupervisor(runner);
 
 async function chown(path: string, uid: number): Promise<void> {
   const proc = Bun.spawn(["chown", "-R", `${uid}:${uid}`, path], { stderr: "pipe" });
@@ -80,6 +81,7 @@ for (const project of store.list()) {
       command: project.command.split(" "),
       internalPort: project.internalPort ?? 8080,
       env: store.getEnv(project.name),
+      namespaceIndex: project.netnsIndex,
     })
     .catch((error: Error) =>
       console.error("could not restart " + project.name + ": " + error.message),
@@ -153,7 +155,10 @@ Bun.serve({
       proxy: async (request, target) => {
         const url = new URL(request.url);
         url.protocol = "http:";
-        url.host = "127.0.0.1:" + target.port;
+        // Reach the service at its own end of the veth pair: its port lives
+        // in its namespace, not on the supervisor loopback.
+        const address = runner.addressFor(target.project) ?? "127.0.0.1";
+        url.host = address + ":" + target.port;
         return fetch(url.toString(), {
           method: request.method,
           headers: request.headers,

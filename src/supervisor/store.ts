@@ -19,6 +19,8 @@ export type StoredProject = ProjectRecord & {
   internalPort: number | null;
   /** Start command for a service, null for a static project. */
   command: string | null;
+  /** Position used to derive the project veth subnet. */
+  netnsIndex: number;
 };
 
 type ProjectRow = {
@@ -27,6 +29,7 @@ type ProjectRow = {
   uid: number | null;
   internal_port: number | null;
   command: string | null;
+  netns_index: number | null;
 };
 
 function toProject(row: ProjectRow): StoredProject {
@@ -36,6 +39,7 @@ function toProject(row: ProjectRow): StoredProject {
     uid: row.uid ?? 0,
     internalPort: row.internal_port,
     command: row.command,
+    netnsIndex: row.netns_index ?? 0,
   };
 }
 
@@ -50,6 +54,7 @@ export class Store {
         uid           INTEGER UNIQUE,
         internal_port INTEGER,
         command       TEXT,
+        netns_index   INTEGER,
         created_at    INTEGER NOT NULL DEFAULT (unixepoch())
       );
 
@@ -84,14 +89,14 @@ export class Store {
 
   lookup(name: string): StoredProject | null {
     const row = this.database
-      .query("SELECT name, type, uid, internal_port, command FROM projects WHERE name = ?")
+      .query("SELECT name, type, uid, internal_port, command, netns_index FROM projects WHERE name = ?")
       .get(name) as ProjectRow | null;
     return row === null ? null : toProject(row);
   }
 
   list(): StoredProject[] {
     const rows = this.database
-      .query("SELECT name, type, uid, internal_port, command FROM projects ORDER BY name")
+      .query("SELECT name, type, uid, internal_port, command, netns_index FROM projects ORDER BY name")
       .all() as ProjectRow[];
     return rows.map(toProject);
   }
@@ -134,6 +139,11 @@ export class Store {
         `INSERT INTO projects (name, type, uid) VALUES (?, 'static', ?)
          ON CONFLICT(name) DO UPDATE SET uid = excluded.uid`,
         [name, next],
+      );
+      // The netns index follows the uid, so wiring is stable across restarts.
+      this.database.run(
+        'UPDATE projects SET netns_index = ? WHERE name = ? AND netns_index IS NULL',
+        [next - FIRST_UID, name],
       );
       return next;
     });

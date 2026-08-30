@@ -38,6 +38,8 @@ export type DeployDeps = {
   homeFor: (project: string) => string;
   /** Hands a directory to the project's uid. Injected for the same reason. */
   chown?: (path: string, uid: number) => Promise<void>;
+  /** Set false where network namespaces are unavailable, such as in tests. */
+  isolateNetwork?: boolean;
 };
 
 export async function deployArchive(
@@ -90,6 +92,8 @@ export async function deployArchive(
       command: spec.start.split(" "),
       internalPort,
       env: deps.store.getEnv(project),
+      namespaceIndex: deps.store.lookup(project)?.netnsIndex ?? 0,
+      isolateNetwork: deps.isolateNetwork,
     });
   }
 

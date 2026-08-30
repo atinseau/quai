@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
 import { LinuxRunner } from "./linux-runner";
+import { NetworkNamespace, allocateSubnet } from "./netns";
 import type { RunSpec } from "./runner";
 
 /** Exposes the argv so the launch contract can be checked without a container. */
 class Inspectable extends LinuxRunner {
-  argvFor(spec: RunSpec): string[] {
-    return this.buildArgv(spec);
+  argvFor(spec: RunSpec, namespace: NetworkNamespace | null = null): string[] {
+    return this.buildArgv(spec, namespace);
   }
 }
 
@@ -19,6 +20,7 @@ const spec: RunSpec = {
 };
 
 const runner = new Inspectable();
+const namespace = new NetworkNamespace("api", allocateSubnet(0), 3000);
 
 describe("launch contract", () => {
   test("the process is dropped to the project's uid before exec", () => {
@@ -41,8 +43,7 @@ describe("launch contract", () => {
     // Without this the process runs with root's HOME and cannot write its own
     // files — the exact failure seen in the container.
     const argv = runner.argvFor(spec);
-    const envIndex = argv.indexOf("env");
-    expect(argv.slice(envIndex)).toContain("HOME=/home/quai-api");
+    expect(argv.slice(argv.indexOf("env"))).toContain("HOME=/home/quai-api");
   });
 
   test("PORT tells the process where to listen", () => {
@@ -66,6 +67,35 @@ describe("launch contract", () => {
 
   test("running as root is refused outright", async () => {
     await expect(runner.start({ ...spec, uid: 0 })).rejects.toThrow(/root/i);
+  });
+});
+
+describe("launching inside a namespace", () => {
+  test("the process is placed in the project's namespace", () => {
+    expect(runner.argvFor(spec, namespace).slice(0, 4)).toEqual([
+      "ip",
+      "netns",
+      "exec",
+      "quai-api",
+    ]);
+  });
+
+  test("the namespace is entered before privileges are dropped", () => {
+    // Entering needs NET_ADMIN, which the project itself must never hold.
+    const argv = runner.argvFor(spec, namespace);
+    expect(argv.indexOf("netns")).toBeLessThan(argv.indexOf("setpriv"));
+  });
+
+  test("the command still ends the line inside a namespace", () => {
+    expect(runner.argvFor(spec, namespace).slice(-2)).toEqual(["node", "server.js"]);
+  });
+
+  test("two projects listening on the same port get different addresses", () => {
+    // Same port, different namespace: no collision to resolve.
+    const alpha = new NetworkNamespace("alpha", allocateSubnet(0), 8080);
+    const beta = new NetworkNamespace("beta", allocateSubnet(1), 8080);
+    expect(alpha.subnet.projectAddress).not.toBe(beta.subnet.projectAddress);
+    expect(alpha.internalPort).toBe(beta.internalPort);
   });
 });
 
