@@ -29,6 +29,9 @@ WORKDIR /opt/quai
 COPY package.json tsconfig.json ./
 COPY src/ ./src/
 
+# The function hosts must be readable by every project account.
+RUN chmod -R a+rX /opt/quai/src/hosts
+
 # The deploy key is pinned to this command, so it can never yield a shell.
 RUN printf '#!/bin/sh\nexec bun run /opt/quai/src/ingest/forced-command.ts\n' \
       > /usr/local/bin/quai-forced-command \

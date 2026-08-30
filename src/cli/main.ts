@@ -68,6 +68,7 @@ async function deploy(directory: string): Promise<void> {
   console.log(`Deploying ${project} (${spec.type}, ${files.length} files)...`);
 
   const query = new URLSearchParams({ type: spec.type });
+  if (spec.runtime) query.set("runtime", spec.runtime);
   if (spec.start) query.set("start", spec.start);
   if (spec.internalPort) query.set("port", String(spec.internalPort));
 

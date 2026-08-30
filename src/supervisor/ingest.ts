@@ -9,6 +9,8 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { subdomainOf } from "./naming";
 import { DEFAULT_DISK_QUOTA } from "./quota";
+import { functionHostFor } from "./function-host";
+import type { Runtime } from "../cli/manifest";
 import type { ProjectSupervisor } from "./runner";
 import type { SiteStorage } from "./sites";
 import type { Store } from "./store";
@@ -20,6 +22,10 @@ export type DeploySpec = {
   /** Start command for a service, ignored for a static project. */
   start?: string;
   internalPort?: number;
+  /** Which runtime hosts a function. */
+  runtime?: Runtime;
+  /** Seconds a function may run before the caller gets a definite answer. */
+  timeoutSeconds?: number;
 };
 
 export type DeployResult = {
@@ -71,7 +77,19 @@ export async function deployArchive(
     await deps.applyQuota?.(project, uid, DEFAULT_DISK_QUOTA);
     deps.store.upsertProject({ name: project, type: "static" });
   } else {
-    if (!spec.start) {
+    // A function is a handler, not a server: Quai supplies the host that
+    // turns it into one, so the developer declares the file rather than a
+    // command line.
+    const host =
+      spec.type === "function"
+        ? functionHostFor(
+            spec.runtime ?? "node",
+            spec.start ?? "index.js",
+            spec.timeoutSeconds ?? 30,
+          )
+        : null;
+
+    if (host === null && !spec.start) {
       throw new Error("A service must declare its start command");
     }
 
@@ -93,16 +111,23 @@ export async function deployArchive(
       name: project,
       type: spec.type,
       internalPort,
-      command: spec.start,
+      command: host ? host.command.join(" ") : spec.start,
     });
+
+    // The host reads the handler and timeout from the environment, so they
+    // have to be persisted: otherwise a restart relaunches the host with no
+    // handler to serve.
+    for (const [key, value] of Object.entries(host?.env ?? {})) {
+      deps.store.setEnv(project, key, value);
+    }
 
     await deps.projects.start({
       project,
       uid,
       home,
-      command: spec.start.split(" "),
+      command: host ? host.command : spec.start!.split(" "),
       internalPort,
-      env: deps.store.getEnv(project),
+      env: { ...deps.store.getEnv(project), ...(host?.env ?? {}) },
       namespaceIndex: deps.store.lookup(project)?.netnsIndex ?? 0,
       isolateNetwork: deps.isolateNetwork,
     });

@@ -210,3 +210,92 @@ describe("disk quota on deploy", () => {
   });
 });
 
+
+describe("deploying a function", () => {
+  const fn = { type: "function" as const, start: "api.js", runtime: "node" as const };
+
+  test("a handler is deployed without declaring a command line", () => {
+    // The developer names a file; Quai supplies the host that serves it.
+    expect(async () => {
+      await deployArchive("fn", packTar([entry("api.js", "export default () => {}")]), fn, deps);
+    }).not.toThrow();
+  });
+
+  test("the function is served by a host, not run directly", async () => {
+    await deployArchive("fn", packTar([entry("api.js", "//")]), fn, deps);
+    expect(runner.started[0]!.command.join(" ")).toContain("node-host");
+  });
+
+  test("the handler path reaches the host through the environment", async () => {
+    await deployArchive("fn", packTar([entry("api.js", "//")]), fn, deps);
+    expect(runner.started[0]!.env.QUAI_HANDLER).toBe("api.js");
+  });
+
+  test("the timeout reaches the host", async () => {
+    await deployArchive(
+      "fn",
+      packTar([entry("api.js", "//")]),
+      { ...fn, timeoutSeconds: 45 },
+      deps,
+    );
+    expect(runner.started[0]!.env.QUAI_TIMEOUT_MS).toBe("45000");
+  });
+
+  test("each runtime gets its own host", async () => {
+    await deployArchive("py", packTar([entry("main.py", "#")]), {
+      type: "function",
+      start: "main.py",
+      runtime: "python",
+    }, deps);
+    expect(runner.started[0]!.command.join(" ")).toContain("python_host");
+  });
+
+  test("the project's own variables survive alongside the host's", async () => {
+    deps.store.upsertProject({ name: "fn", type: "function" });
+    deps.store.setEnv("fn", "API_KEY", "secret");
+    await deployArchive("fn", packTar([entry("api.js", "//")]), fn, deps);
+    expect(runner.started[0]!.env).toMatchObject({
+      API_KEY: "secret",
+      QUAI_HANDLER: "api.js",
+    });
+  });
+
+  test("a function is recorded as a function, so it is restored as one", async () => {
+    await deployArchive("fn", packTar([entry("api.js", "//")]), fn, deps);
+    expect(deps.store.lookup("fn")!.type).toBe("function");
+  });
+});
+
+
+describe("functions survive a restart", () => {
+  const fn = { type: "function" as const, start: "api.js", runtime: "node" as const };
+
+  test("the handler is persisted, not only passed to the first launch", async () => {
+    // The host reads QUAI_HANDLER from the environment. Without persisting it,
+    // a restart relaunches the host with no handler to serve — observed in the
+    // container, where Node and Bun functions came back dead.
+    await deployArchive("fn", packTar([entry("api.js", "//")]), fn, deps);
+    expect(deps.store.getEnv("fn").QUAI_HANDLER).toBe("api.js");
+  });
+
+  test("the timeout is persisted too", async () => {
+    await deployArchive("fn", packTar([entry("api.js", "//")]), { ...fn, timeoutSeconds: 45 }, deps);
+    expect(deps.store.getEnv("fn").QUAI_TIMEOUT_MS).toBe("45000");
+  });
+
+  test("the recorded command is enough to relaunch the host", async () => {
+    await deployArchive("fn", packTar([entry("api.js", "//")]), fn, deps);
+    expect(deps.store.lookup("fn")!.command).toContain("node-host");
+  });
+
+  test("a project's own variables are not clobbered by the host's", async () => {
+    deps.store.upsertProject({ name: "fn", type: "function" });
+    deps.store.setEnv("fn", "API_KEY", "secret");
+    await deployArchive("fn", packTar([entry("api.js", "//")]), fn, deps);
+    expect(deps.store.getEnv("fn")).toMatchObject({
+      API_KEY: "secret",
+      QUAI_HANDLER: "api.js",
+    });
+  });
+});
+

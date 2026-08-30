@@ -140,8 +140,12 @@ Bun.serve({
       const spec: DeploySpec = {
         type: (url.searchParams.get("type") as DeploySpec["type"]) ?? "static",
         start: url.searchParams.get("start") ?? undefined,
+        runtime: (url.searchParams.get("runtime") as DeploySpec["runtime"]) ?? undefined,
         internalPort: url.searchParams.has("port")
           ? Number(url.searchParams.get("port"))
+          : undefined,
+        timeoutSeconds: url.searchParams.has("timeout")
+          ? Number(url.searchParams.get("timeout"))
           : undefined,
       };
 
