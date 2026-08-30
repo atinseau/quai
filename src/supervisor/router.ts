@@ -1,9 +1,10 @@
 /**
  * Request routing.
  *
- * The router maps a Host header to a project and serves it. It is written
- * against injected lookups rather than the filesystem so the routing rules can
- * be tested without deploying anything.
+ * The router maps a Host header to a project and serves it: files straight
+ * from disk for a static project, a proxied request into its namespace for a
+ * service. It is written against injected lookups rather than the filesystem
+ * so the routing rules can be tested without deploying anything.
  */
 
 import type { HealthReport } from "./health";
@@ -13,7 +14,12 @@ import { resolveStaticFile } from "./static";
 export type ProjectRecord = {
   name: string;
   type: "static" | "function" | "service";
+  /** The port a service listens on inside its own network namespace. */
+  internalPort?: number | null;
 };
+
+/** Where a proxied request should be delivered. */
+export type ProxyTarget = { project: string; port: number };
 
 export type RouterContext = {
   /** The wildcard zone projects are served under. */
@@ -23,6 +29,8 @@ export type RouterContext = {
   /** Reads a file, or null when it is absent. */
   readFile: (root: string, path: string) => Promise<string | Uint8Array | null>;
   rootFor: (project: string) => string;
+  /** Forwards a request into a project's namespace. */
+  proxy: (request: Request, target: ProxyTarget) => Promise<Response>;
 };
 
 const CONTENT_TYPES: Record<string, string> = {
@@ -70,6 +78,19 @@ export async function handleRequest(
 
   const record = context.lookup(project);
   if (record === null) return notFound();
+
+  if (record.type === "service" || record.type === "function") {
+    try {
+      return await context.proxy(request, {
+        project,
+        port: record.internalPort ?? 8080,
+      });
+    } catch {
+      // 404 would claim the project does not exist. 502 says it exists but is
+      // not answering, which is what an operator needs to know.
+      return new Response("Bad gateway: the project is not responding", { status: 502 });
+    }
+  }
 
   const root = context.rootFor(project);
   const filePath = resolveStaticFile(root, url.pathname);

@@ -7,14 +7,16 @@
 
 import { mkdir, readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { createAccount, homeFor, readAccounts } from "./accounts";
 import { buildHealthReport } from "./health";
-import { deployArchive } from "./ingest";
+import { deployArchive, type DeploySpec } from "./ingest";
+import { LinuxRunner } from "./linux-runner";
 import { checkIsolationSupport, formatFailures } from "./preflight";
 import { formatReport, reconcile } from "./reconcile";
 import { handleRequest } from "./router";
+import { ProjectSupervisor } from "./runner";
 import { SiteStore } from "./sites";
 import { openStore } from "./store";
-import { readAccounts, createAccount } from "./accounts";
 import { readRuntimes, readSystem } from "./system";
 
 const HOMES = process.env.QUAI_HOMES ?? "/srv/quai/homes";
@@ -37,6 +39,25 @@ await mkdir(STATE, { recursive: true });
 
 const sites = new SiteStore(sitesDirectory);
 const store = openStore(join(STATE, "quai.db"));
+const projects = new ProjectSupervisor(new LinuxRunner());
+
+async function chown(path: string, uid: number): Promise<void> {
+  const proc = Bun.spawn(["chown", "-R", `${uid}:${uid}`, path], { stderr: "pipe" });
+  await proc.exited;
+}
+
+const deployDeps = {
+  sites,
+  store,
+  zone: ZONE,
+  projects,
+  ensureAccount: async (project: string, uid: number) => {
+    const accounts = await readAccounts();
+    if (!accounts.has(project)) await createAccount(project, uid);
+  },
+  homeFor,
+  chown,
+};
 
 // Accounts, cgroups and namespaces do not survive the container being
 // recreated, so rebuild them from the database before serving anything.
@@ -47,6 +68,23 @@ const report = await reconcile(store.list(), {
 });
 const summary = formatReport(report);
 if (summary.length > 0) console.log(summary);
+
+// Services recorded in the database must be running again after a restart.
+for (const project of store.list()) {
+  if (project.type === "static" || project.command === null) continue;
+  await projects
+    .start({
+      project: project.name,
+      uid: project.uid,
+      home: homeFor(project.name),
+      command: project.command.split(" "),
+      internalPort: project.internalPort ?? 8080,
+      env: store.getEnv(project.name),
+    })
+    .catch((error: Error) =>
+      console.error("could not restart " + project.name + ": " + error.message),
+    );
+}
 
 const health = buildHealthReport({ isolation, runtimes });
 
@@ -69,14 +107,35 @@ Bun.serve({
         return Response.json({ error: "Invalid project name" }, { status: 400 });
       }
 
+      const spec: DeploySpec = {
+        type: (url.searchParams.get("type") as DeploySpec["type"]) ?? "static",
+        start: url.searchParams.get("start") ?? undefined,
+        internalPort: url.searchParams.has("port")
+          ? Number(url.searchParams.get("port"))
+          : undefined,
+      };
+
       try {
         const archive = new Uint8Array(await request.arrayBuffer());
-        const result = await deployArchive(project, archive, { sites, store, zone: ZONE });
+        const result = await deployArchive(project, archive, spec, deployDeps);
         return Response.json(result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         return Response.json({ error: message }, { status: 400 });
       }
+    }
+
+    // Operator view of what is actually running.
+    if (url.pathname === "/_quai/status") {
+      const states = await Promise.all(
+        store.list().map(async (project) => ({
+          name: project.name,
+          type: project.type,
+          uid: project.uid,
+          run: await projects.status(project.name),
+        })),
+      );
+      return Response.json(states);
     }
 
     return handleRequest(request, {
@@ -90,6 +149,16 @@ Bun.serve({
         } catch {
           return null;
         }
+      },
+      proxy: async (request, target) => {
+        const url = new URL(request.url);
+        url.protocol = "http:";
+        url.host = "127.0.0.1:" + target.port;
+        return fetch(url.toString(), {
+          method: request.method,
+          headers: request.headers,
+          body: request.body,
+        });
       },
     });
   },

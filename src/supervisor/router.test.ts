@@ -13,6 +13,7 @@ function contextWith(sites: Record<string, Record<string, string>>): RouterConte
       return sites[project]?.[path] ?? null;
     },
     rootFor: (project) => "/srv/quai/sites/" + project,
+    proxy: async () => new Response("not a service", { status: 500 }),
   };
 }
 

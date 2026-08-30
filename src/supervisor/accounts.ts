@@ -31,6 +31,11 @@ export function accountNameFor(project: string): string {
   return "quai-" + project;
 }
 
+/** The home directory a project's files live in. */
+export function homeFor(project: string): string {
+  return "/home/" + accountNameFor(project);
+}
+
 /**
  * Creates the account for a project with an exact uid.
  *
@@ -61,7 +66,16 @@ export async function createAccount(project: string, uid: number): Promise<void>
   }
 
   // 0750 is what keeps a neighbour from listing or reading the home.
-  const chmod = Bun.spawn(["chmod", "0750", `/home/${account}`], { stderr: "pipe" });
+  const chmod = Bun.spawn(["chmod", "0750", homeFor(project)], { stderr: "pipe" });
   await chmod.exited;
+}
+
+/** Removes a project's account and home. */
+export async function removeAccount(project: string): Promise<void> {
+  const proc = Bun.spawn(["userdel", "--remove", accountNameFor(project)], {
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  await proc.exited;
 }
 

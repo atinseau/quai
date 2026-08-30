@@ -17,7 +17,27 @@ const FIRST_UID = 10000;
 export type StoredProject = ProjectRecord & {
   uid: number;
   internalPort: number | null;
+  /** Start command for a service, null for a static project. */
+  command: string | null;
 };
+
+type ProjectRow = {
+  name: string;
+  type: string;
+  uid: number | null;
+  internal_port: number | null;
+  command: string | null;
+};
+
+function toProject(row: ProjectRow): StoredProject {
+  return {
+    name: row.name,
+    type: row.type as ProjectRecord["type"],
+    uid: row.uid ?? 0,
+    internalPort: row.internal_port,
+    command: row.command,
+  };
+}
 
 export class Store {
   constructor(readonly database: Database) {
@@ -29,6 +49,7 @@ export class Store {
         type          TEXT NOT NULL,
         uid           INTEGER UNIQUE,
         internal_port INTEGER,
+        command       TEXT,
         created_at    INTEGER NOT NULL DEFAULT (unixepoch())
       );
 
@@ -45,6 +66,11 @@ export class Store {
         value   TEXT NOT NULL,
         PRIMARY KEY (project, key)
       );
+
+      CREATE TABLE IF NOT EXISTS domains (
+        domain  TEXT PRIMARY KEY,
+        project TEXT NOT NULL REFERENCES projects(name) ON DELETE CASCADE
+      );
     `);
     this.database.run("INSERT OR IGNORE INTO uid_watermark (id, next) VALUES (1, ?)", [
       FIRST_UID,
@@ -58,44 +84,27 @@ export class Store {
 
   lookup(name: string): StoredProject | null {
     const row = this.database
-      .query("SELECT name, type, uid, internal_port FROM projects WHERE name = ?")
-      .get(name) as
-      | { name: string; type: string; uid: number | null; internal_port: number | null }
-      | null;
-
-    if (row === null) return null;
-    return {
-      name: row.name,
-      type: row.type as ProjectRecord["type"],
-      uid: row.uid ?? 0,
-      internalPort: row.internal_port,
-    };
+      .query("SELECT name, type, uid, internal_port, command FROM projects WHERE name = ?")
+      .get(name) as ProjectRow | null;
+    return row === null ? null : toProject(row);
   }
 
   list(): StoredProject[] {
     const rows = this.database
-      .query("SELECT name, type, uid, internal_port FROM projects ORDER BY name")
-      .all() as {
-      name: string;
-      type: string;
-      uid: number | null;
-      internal_port: number | null;
-    }[];
-
-    return rows.map((row) => ({
-      name: row.name,
-      type: row.type as ProjectRecord["type"],
-      uid: row.uid ?? 0,
-      internalPort: row.internal_port,
-    }));
+      .query("SELECT name, type, uid, internal_port, command FROM projects ORDER BY name")
+      .all() as ProjectRow[];
+    return rows.map(toProject);
   }
 
-  upsertProject(record: ProjectRecord & { internalPort?: number | null }): void {
+  upsertProject(
+    record: ProjectRecord & { internalPort?: number | null; command?: string | null },
+  ): void {
     this.database.run(
-      `INSERT INTO projects (name, type, internal_port) VALUES (?, ?, ?)
+      `INSERT INTO projects (name, type, internal_port, command) VALUES (?, ?, ?, ?)
        ON CONFLICT(name) DO UPDATE SET type = excluded.type,
-                                       internal_port = excluded.internal_port`,
-      [record.name, record.type, record.internalPort ?? null],
+                                       internal_port = excluded.internal_port,
+                                       command = excluded.command`,
+      [record.name, record.type, record.internalPort ?? null, record.command ?? null],
     );
   }
 
@@ -147,6 +156,33 @@ export class Store {
 
   unsetEnv(project: string, key: string): void {
     this.database.run("DELETE FROM env WHERE project = ? AND key = ?", [project, key]);
+  }
+
+  /** Custom domains pointing at a project, in addition to its subdomain. */
+  domainsFor(project: string): string[] {
+    const rows = this.database
+      .query("SELECT domain FROM domains WHERE project = ? ORDER BY domain")
+      .all(project) as { domain: string }[];
+    return rows.map((row) => row.domain);
+  }
+
+  projectForDomain(domain: string): string | null {
+    const row = this.database
+      .query("SELECT project FROM domains WHERE domain = ?")
+      .get(domain.toLowerCase()) as { project: string } | null;
+    return row?.project ?? null;
+  }
+
+  setDomains(project: string, domains: string[]): void {
+    this.transaction(() => {
+      this.database.run("DELETE FROM domains WHERE project = ?", [project]);
+      for (const domain of domains) {
+        this.database.run("INSERT OR REPLACE INTO domains (domain, project) VALUES (?, ?)", [
+          domain.toLowerCase(),
+          project,
+        ]);
+      }
+    });
   }
 }
 
