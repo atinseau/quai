@@ -30,6 +30,8 @@ export type RouterContext = {
   readFile: (root: string, path: string) => Promise<string | Uint8Array | null>;
   rootFor: (project: string) => string;
   /** Forwards a request into a project's namespace. */
+  /** Resolves a custom domain to its project, if any. */
+  projectForDomain?: (domain: string) => string | null;
   proxy: (request: Request, target: ProxyTarget) => Promise<Response>;
 };
 
@@ -62,12 +64,19 @@ export async function handleRequest(
 ): Promise<Response> {
   const host = request.headers.get("host") ?? "";
   const url = new URL(request.url);
-  const project = projectFor(host, context.zone);
+  const hostname = host.toLowerCase().split(":")[0] ?? "";
+
+  // A project's subdomain always wins; a custom domain is consulted only for
+  // hosts outside the zone, so no project can claim the zone itself.
+  const project =
+    projectFor(host, context.zone) ??
+    (hostname === context.zone.toLowerCase()
+      ? null
+      : (context.projectForDomain?.(hostname) ?? null));
 
   // Operator endpoints live on the bare zone, so a project may still be named
   // "health" without hijacking them.
   if (project === null) {
-    const hostname = host.toLowerCase().split(":")[0];
     if (hostname === context.zone.toLowerCase() && url.pathname === "/health") {
       return Response.json(context.health, {
         status: context.health.status === "unhealthy" ? 503 : 200,

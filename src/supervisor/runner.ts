@@ -46,6 +46,8 @@ export interface Runner {
   start(spec: RunSpec): Promise<RunHandle>;
   stop(project: string): Promise<void>;
   status(project: string): Promise<RunState>;
+  /** Recent output, or null when the project is not running. */
+  logs?(project: string): string | null;
 }
 
 /**
@@ -99,6 +101,11 @@ export class ProjectSupervisor {
     }
 
     return actual;
+  }
+
+  /** Recent output of a project, or null when it is not running. */
+  logsFor(project: string): string | null {
+    return this.runner.logs?.(project) ?? null;
   }
 
   running(): string[] {

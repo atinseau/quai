@@ -72,3 +72,38 @@ describe("deploy parameters", () => {
   });
 });
 
+
+describe("administrative commands", () => {
+  const { parseAdminCommand } = require("./parse-command");
+
+  test("a known action on a valid project is accepted", () => {
+    expect(parseAdminCommand("quai-admin logs my-site")).toEqual({
+      action: "logs",
+      project: "my-site",
+    });
+  });
+
+  test("every advertised action is accepted", () => {
+    const { ADMIN_ACTIONS } = require("./parse-command");
+    for (const action of ADMIN_ACTIONS) {
+      expect(parseAdminCommand("quai-admin " + action + " site").action).toBe(action);
+    }
+  });
+
+  test("an unknown action is refused", () => {
+    expect(() => parseAdminCommand("quai-admin exec site")).toThrow(/unknown action/i);
+  });
+
+  test("a shell request is refused here too", () => {
+    expect(() => parseAdminCommand("/bin/bash")).toThrow(/shell/i);
+  });
+
+  test("a path in place of a project name is refused", () => {
+    expect(() => parseAdminCommand("quai-admin remove ../etc")).toThrow(/invalid/i);
+  });
+
+  test("an injected command after the project name is refused", () => {
+    expect(() => parseAdminCommand("quai-admin remove site;rm -rf /")).toThrow(/invalid/i);
+  });
+});
+

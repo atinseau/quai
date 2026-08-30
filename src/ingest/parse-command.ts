@@ -12,6 +12,38 @@ export type DeployRequest = {
   query: string;
 };
 
+/** Administrative actions a deploy key may perform. */
+export const ADMIN_ACTIONS = ["env-get", "env-set", "logs", "remove", "domains"] as const;
+export type AdminAction = (typeof ADMIN_ACTIONS)[number];
+
+export type AdminRequest = { action: AdminAction; project: string };
+
+/**
+ * Parses an administrative request.
+ *
+ * The same strictness as a deploy: only the listed actions are possible, and
+ * the project name is validated rather than trusted.
+ */
+export function parseAdminCommand(requested: string): AdminRequest {
+  const parts = requested.trim().split(/\s+/).filter(Boolean);
+
+  if (parts[0] !== "quai-admin") {
+    throw new Error("This key may only deploy. No shell access is granted.");
+  }
+
+  const action = parts[1] ?? "";
+  if (!ADMIN_ACTIONS.includes(action as AdminAction)) {
+    throw new Error(`Unknown action '${action}'`);
+  }
+
+  const project = parts[2] ?? "";
+  if (!/^[a-z0-9][a-z0-9-]*$/.test(project)) {
+    throw new Error(`Invalid project name '${project}'`);
+  }
+
+  return { action: action as AdminAction, project };
+}
+
 export function parseForcedCommand(requested: string): DeployRequest {
   const parts = requested.trim().split(/\s+/).filter(Boolean);
 

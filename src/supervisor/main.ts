@@ -7,7 +7,7 @@
 
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { createAccount, homeFor, readAccounts } from "./accounts";
+import { createAccount, homeFor, readAccounts, removeAccount } from "./accounts";
 import { buildHealthReport } from "./health";
 import { deployArchive, type DeploySpec } from "./ingest";
 import { LinuxRunner, SECCOMP_POLICY_PATH } from "./linux-runner";
@@ -152,10 +152,75 @@ Bun.serve({
       try {
         const archive = new Uint8Array(await request.arrayBuffer());
         const result = await deployArchive(project, archive, spec, deployDeps);
+
+        // Custom domains are declared in quai.toml and replace the previous
+        // set, so dropping one from the manifest retires it on the next deploy.
+        const declared = url.searchParams.get("domains");
+        if (declared !== null) {
+          store.setDomains(project, declared.split(",").filter(Boolean));
+        }
         return Response.json(result);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         return Response.json({ error: message }, { status: 400 });
+      }
+    }
+
+    // Project administration, reached through the same authenticated channel
+    // as deploys: these endpoints are never part of the public routing surface.
+    if (url.pathname.startsWith("/_quai/") && url.pathname !== "/_quai/deploy") {
+      if (!DEPLOY_TOKEN || request.headers.get("x-quai-token") !== DEPLOY_TOKEN) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+
+      const project = url.searchParams.get("project") ?? "";
+
+      if (url.pathname === "/_quai/env") {
+        if (store.lookup(project) === null) {
+          return Response.json({ error: "No such project" }, { status: 404 });
+        }
+
+        if (request.method === "GET") return Response.json(store.getEnv(project));
+
+        if (request.method === "POST") {
+          const body = (await request.json()) as { set?: Record<string, string>; unset?: string[] };
+          store.transaction(() => {
+            for (const [key, value] of Object.entries(body.set ?? {})) {
+              store.setEnv(project, key, value);
+            }
+            for (const key of body.unset ?? []) store.unsetEnv(project, key);
+          });
+          return Response.json(store.getEnv(project));
+        }
+      }
+
+      if (url.pathname === "/_quai/logs") {
+        const lines = projects.logsFor(project);
+        if (lines === null) {
+          return Response.json({ error: "No such running project" }, { status: 404 });
+        }
+        return new Response(lines, { headers: { "content-type": "text/plain" } });
+      }
+
+      if (url.pathname === "/_quai/domains" && request.method === "POST") {
+        const body = (await request.json()) as { domains?: string[] };
+        store.setDomains(project, body.domains ?? []);
+        return Response.json({ domains: store.domainsFor(project) });
+      }
+
+      if (url.pathname === "/_quai/remove" && request.method === "POST") {
+        if (store.lookup(project) === null) {
+          return Response.json({ error: "No such project" }, { status: 404 });
+        }
+
+        // Order matters: stop the process before removing what it runs on, so
+        // nothing is left holding a deleted home.
+        await projects.stop(project);
+        await sites.remove(project);
+        await removeAccount(project);
+        store.removeProject(project);
+
+        return Response.json({ removed: project });
       }
     }
 
@@ -177,6 +242,7 @@ Bun.serve({
       zone: ZONE,
       health,
       lookup: (project) => store.lookup(project),
+      projectForDomain: (domain) => store.projectForDomain(domain),
       rootFor: (project) => sites.rootFor(project),
       readFile: async (_root, path) => {
         try {

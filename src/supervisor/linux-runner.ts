@@ -17,6 +17,7 @@ import { accountNameFor } from "./accounts";
 import { DEFAULT_LIMITS, ProjectCgroup, type Limits } from "./cgroup";
 import { containerCgroupPath } from "./cgroup-path";
 import { EgressPolicy, natCommands, natInstallCommand } from "./egress";
+import { LogBuffer } from "./logs";
 import { buildJailArgs, resolveExecutable } from "./seccomp";
 import { NetworkNamespace, allocateSubnet } from "./netns";
 import type { RunHandle, RunSpec, RunState, Runner } from "./runner";
@@ -24,11 +25,15 @@ import type { RunHandle, RunSpec, RunState, Runner } from "./runner";
 /** Where the rendered policy is written at startup. */
 export const SECCOMP_POLICY_PATH = "/etc/quai/seccomp.policy";
 
+/** Enough to diagnose a failed start without unbounded growth. */
+const MAX_LOG_LINES = 500;
+
 type Running = {
   handle: RunHandle;
   process: Bun.Subprocess;
   namespace: NetworkNamespace | null;
   cgroup: ProjectCgroup | null;
+  logs: LogBuffer;
 };
 
 async function run(argv: string[]): Promise<{ ok: boolean; stderr: string }> {
@@ -230,7 +235,10 @@ export class LinuxRunner implements Runner {
       // Requests reach the service at its own end of the veth pair.
       address: namespace?.subnet.projectAddress ?? "127.0.0.1",
     };
-    this.processes.set(spec.project, { handle, process: child, namespace, cgroup });
+    const logs = new LogBuffer(MAX_LOG_LINES);
+    this.captureOutput(child, logs);
+
+    this.processes.set(spec.project, { handle, process: child, namespace, cgroup, logs });
     return handle;
   }
 
@@ -268,9 +276,28 @@ export class LinuxRunner implements Runner {
     return this.processes.get(project)?.handle.address ?? null;
   }
 
-  /** Reads whatever the project has written to stdout and stderr so far. */
-  streamsFor(project: string): Bun.Subprocess | null {
-    return this.processes.get(project)?.process ?? null;
+  /**
+   * Drains a project's output into its buffer.
+   *
+   * Reading continuously matters: an unread pipe fills and blocks the project
+   * once it has written enough.
+   */
+  private captureOutput(child: Bun.Subprocess, logs: LogBuffer): void {
+    for (const stream of [child.stdout, child.stderr]) {
+      if (!(stream instanceof ReadableStream)) continue;
+
+      void (async () => {
+        const decoder = new TextDecoder();
+        for await (const chunk of stream) {
+          logs.append(decoder.decode(chunk as Uint8Array, { stream: true }));
+        }
+      })().catch(() => {});
+    }
+  }
+
+  /** Recent output of a project, or null when it is not running. */
+  logs(project: string): string | null {
+    return this.processes.get(project)?.logs.read() ?? null;
   }
 }
 
