@@ -168,3 +168,36 @@ describe("resolving what to deploy", () => {
   });
 });
 
+
+describe("a lone handler file", () => {
+  test("api.js alone is a Node function", () => {
+    // The spec's second story: deploy a single file with no configuration.
+    expect(detectProjectType(new Set(["api.js"]))).toMatchObject({
+      type: "function",
+      runtime: "node",
+    });
+  });
+
+  test("api.py alone is a Python function", () => {
+    expect(detectProjectType(new Set(["api.py"]))?.runtime).toBe("python");
+  });
+
+  test("api.ts alone is a Bun function", () => {
+    expect(detectProjectType(new Set(["api.ts"]))?.runtime).toBe("bun");
+  });
+
+  test("the handler needs no start command in a manifest", () => {
+    const spec = resolveDeploySpec(new Set(["api.js"]), null);
+    expect(spec.type).toBe("function");
+    expect(spec.start).toBe("api.js");
+  });
+
+  test("a package.json wins, since the handler is then part of a larger project", () => {
+    expect(detectProjectType(new Set(["api.js", "package.json"]))?.type).toBe("service");
+  });
+
+  test("an index.html wins, since a site may well contain an api.js", () => {
+    expect(detectProjectType(new Set(["api.js", "index.html"]))?.type).toBe("static");
+  });
+});
+

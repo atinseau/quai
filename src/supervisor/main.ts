@@ -25,7 +25,8 @@ import { handleRequest } from "./router";
 import { ProjectSupervisor } from "./runner";
 import { SiteStore } from "./sites";
 import { openStore } from "./store";
-import { ProjectQuota } from "./quota";
+import { ProjectQuota, parseQuotaReport } from "./quota";
+import { containerCgroupPath } from "./cgroup-path";
 import { readRuntimes, readSystem } from "./system";
 
 const HOMES = process.env.QUAI_HOMES ?? "/srv/quai/homes";
@@ -55,6 +56,14 @@ const sites = new SiteStore(sitesDirectory);
 const store = openStore(join(STATE, "quai.db"));
 const runner = new LinuxRunner();
 const projects = new ProjectSupervisor(runner);
+
+/** Runs a command and returns its stdout, or an empty string on failure. */
+async function readCommand(argv: string[]): Promise<string> {
+  const proc = Bun.spawn(argv, { stdout: "pipe", stderr: "pipe" });
+  const out = await new Response(proc.stdout).text();
+  await proc.exited;
+  return proc.exitCode === 0 ? out : "";
+}
 
 async function runCommand(argv: string[]): Promise<{ ok: boolean; stderr: string }> {
   const proc = Bun.spawn(argv, { stdout: "pipe", stderr: "pipe" });
@@ -277,14 +286,44 @@ Bun.serve({
 
     // Operator view of what is actually running.
     if (url.pathname === "/_quai/status") {
+      // What is actually enforced, read back from the kernel rather than
+      // echoed from configuration: an operator diagnosing odd behaviour needs
+      // the effective limits, not the intended ones.
+      const containerCgroup = await containerCgroupPath();
+      const quotaReport = await readCommand([
+        "xfs_quota", "-x", "-c", "report -p -N -b", HOMES,
+      ]);
+
       const states = await Promise.all(
-        store.list().map(async (project) => ({
-          name: project.name,
-          type: project.type,
-          uid: project.uid,
-          run: await projects.status(project.name),
-          seccompPolicy: SECCOMP_POLICY_PATH,
-        })),
+        store.list().map(async (project) => {
+          const cgroup = containerCgroup + "/quai-" + project.name;
+          const readLimit = (file: string) =>
+            readFile(join(cgroup, file), "utf8").then((v) => v.trim()).catch(() => null);
+
+          const quotaLine = quotaReport
+            .split("\n")
+            .find((line) => line.trim().startsWith("#" + project.uid + " "));
+
+          return {
+            name: project.name,
+            type: project.type,
+            uid: project.uid,
+            run: await projects.status(project.name),
+            limits: {
+              memory: await readLimit("memory.max"),
+              cpu: await readLimit("cpu.max"),
+              pids: await readLimit("pids.max"),
+              disk: quotaLine === undefined ? null : parseQuotaReport(quotaLine),
+            },
+            usage: {
+              memoryPeak: await readLimit("memory.peak"),
+              pidsCurrent: await readLimit("pids.current"),
+            },
+            internalPort: project.internalPort,
+            domains: store.domainsFor(project.name),
+            seccompPolicy: SECCOMP_POLICY_PATH,
+          };
+        }),
       );
       return Response.json(states);
     }

@@ -13,7 +13,14 @@ export type DeployRequest = {
 };
 
 /** Administrative actions a deploy key may perform. */
-export const ADMIN_ACTIONS = ["env-get", "env-set", "logs", "remove", "domains"] as const;
+export const ADMIN_ACTIONS = [
+  "env-get",
+  "env-set",
+  "logs",
+  "remove",
+  "domains",
+  "status",
+] as const;
 export type AdminAction = (typeof ADMIN_ACTIONS)[number];
 
 export type AdminRequest = { action: AdminAction; project: string };

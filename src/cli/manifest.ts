@@ -13,7 +13,21 @@
 export type ProjectType = "static" | "service" | "function";
 export type Runtime = "node" | "bun" | "python";
 
-export type Detection = { type: ProjectType; runtime?: Runtime };
+export type Detection = {
+  type: ProjectType;
+  runtime?: Runtime;
+  /** The handler file, when a lone function was recognised. */
+  handler?: string;
+};
+
+/** Files that name a function all by themselves, most conventional first. */
+const FUNCTION_HANDLERS: { file: string; runtime: Runtime }[] = [
+  { file: "api.js", runtime: "node" },
+  { file: "api.ts", runtime: "bun" },
+  { file: "api.py", runtime: "python" },
+  { file: "handler.js", runtime: "node" },
+  { file: "handler.py", runtime: "python" },
+];
 
 export type Manifest = {
   name?: string;
@@ -74,6 +88,13 @@ export function detectProjectType(files: Set<string>): Detection | null {
   // a framework's public/index.html must not make the whole project static.
   if (files.has("index.html")) return { type: "static" };
 
+  // A lone handler file is a function: the spec's second story is deploying
+  // api.js on its own, with no manifest and no package.json.
+  const handler = FUNCTION_HANDLERS.find((candidate) => files.has(candidate.file));
+  if (handler !== undefined) {
+    return { type: "function", runtime: handler.runtime, handler: handler.file };
+  }
+
   return null;
 }
 
@@ -119,7 +140,8 @@ export function resolveDeploySpec(files: Set<string>, manifestSource: string | n
   }
 
   const type = manifest?.type ?? detected!.type;
-  const start = manifest?.service?.start;
+  // A detected function already knows its handler, so no manifest is needed.
+  const start = manifest?.service?.start ?? detected?.handler;
 
   if (type !== "static" && !start) {
     throw new Error(

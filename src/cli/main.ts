@@ -230,6 +230,16 @@ async function init(directory: string): Promise<void> {
   console.log("Wrote quai.toml (" + (detected?.type ?? "static") + "). Edit it, then run 'quai'.");
 }
 
+/** Shows what is actually enforced for this project. */
+async function statusCommand(directory: string): Promise<void> {
+  const project = projectNameFromPath(resolve(directory));
+  const all = JSON.parse(await admin("status", project)) as Record<string, unknown>[];
+  const found = all.find((entry) => entry.name === project);
+
+  if (found === undefined) fail(`no project named ${project} on this instance`);
+  console.log(JSON.stringify(found, null, 2));
+}
+
 async function login(host: string, zone: string): Promise<void> {
   if (!host || !zone) fail("usage: quai login <user@host> <zone>");
   await writeConfig({ host, zone });
@@ -248,6 +258,9 @@ switch (command) {
     break;
   case "env":
     await envCommand(rest, process.cwd());
+    break;
+  case "status":
+    await statusCommand(rest[0] ?? process.cwd());
     break;
   case "logs":
     await logsCommand(rest);
@@ -268,6 +281,7 @@ switch (command) {
         "  quai init [dir]           write a quai.toml for this project",
         "  quai env ls|add|rm|pull   manage environment variables",
         "  quai logs [-f]            show recent output, -f to follow",
+        "  quai status               show the limits actually enforced",
         "  quai rm                   delete the project and everything it owns",
         "  quai login <host> <zone>  point the CLI at an instance",
       ].join("\n"),

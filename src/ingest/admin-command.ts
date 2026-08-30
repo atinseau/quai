@@ -33,6 +33,7 @@ const ENDPOINTS: Record<string, { path: string; method: string }> = {
   logs: { path: "/_quai/logs", method: "GET" },
   remove: { path: "/_quai/remove", method: "POST" },
   domains: { path: "/_quai/domains", method: "POST" },
+  status: { path: "/_quai/status", method: "GET" },
 };
 
 const endpoint = ENDPOINTS[action]!;
