@@ -48,6 +48,8 @@ the wrong thing.
   accepts, timeouts, failures, and when a service is the better fit
 - **[Deploying an instance](docs/deploying.md)** — what the host must provide,
   the Compose file, and how to check it works
+  — including a [nested deployment](docs/deploying.md#nested-deployment) that
+  asks a shared machine for one container and nothing else
 - **[Operating an instance](docs/operating.md)** — crashes, logs, backups,
   limits
 

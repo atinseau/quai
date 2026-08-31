@@ -1,0 +1,87 @@
+# Quai in a nested Docker — paste this into Coolify as a Raw Compose deployment.
+#
+# Use this instead of deploy/compose.yaml when the host already runs something
+# you care about. Quai needs a shared cgroup namespace, NET_ADMIN, SYS_ADMIN
+# and an XFS volume with project quotas; granting those on a machine that also
+# runs your databases is a large ask. Here they are granted to a Docker daemon
+# that runs nothing but Quai, and the host provides one container.
+#
+# What the host does NOT do: no mkfs, no mount, no /etc/fstab entry, no cgroup
+# writes, and no iptables rules alongside its own. Removing all of it is
+# 'docker compose down -v'.
+#
+# The isolation is the same either way: the full 28-check integration suite
+# passes nested, including memory caps, disk quotas and network separation.
+#
+# The cost is a privileged outer container and nested overlayfs, so project
+# disk I/O is slower. For static sites and functions this is not noticeable.
+#
+# After the first deploy, add your public key:
+#
+#   docker compose exec quai-host docker exec -i quai \
+#     sh -c 'echo "ssh-ed25519 AAAA... you@host" >> /srv/quai/state/authorized_keys'
+#   docker compose exec quai-host docker restart quai
+#
+# Then, on your machine:  quai login root@<host>:2222 quai.<your-domain>
+
+services:
+  quai-host:
+    image: docker:29-dind
+    restart: unless-stopped
+
+    # Required by the inner daemon, and the whole point of this file: the
+    # privilege stops here instead of reaching the host's own services.
+    privileged: true
+
+    environment:
+      # dind generates TLS certs and refuses plain connections unless this is
+      # empty. Nothing outside this container can reach the inner socket.
+      DOCKER_TLS_CERTDIR: ""
+      QUAI_IMAGE: ${QUAI_IMAGE:-ghcr.io/atinseau/quai:latest}
+      # The wildcard zone projects are served under. Point *.quai.<domain> at
+      # this service; Coolify terminates TLS with one wildcard certificate.
+      QUAI_ZONE: ${QUAI_ZONE:-quai.localhost}
+      # GiB reserved for project homes, allocated up front.
+      QUAI_HOMES_SIZE: ${QUAI_HOMES_SIZE:-8}
+
+    volumes:
+      # The XFS image lives here, so projects and quotas survive a restart.
+      - quai-data:/quai-data
+      # The inner daemon's own storage. Without it every restart re-pulls the
+      # Quai image and loses the inner container's identity.
+      - quai-docker:/var/lib/docker
+      - ./boot.sh:/boot.sh:ro
+
+    ports:
+      - "${QUAI_HTTP_PORT:-8080}:8080"
+      # The deploy channel. Keys are pinned to a forced command, so this port
+      # grants deployment and nothing else.
+      - "${QUAI_SSH_PORT:-2222}:22"
+
+    # A ceiling on the whole nested world, so a Quai that misbehaves cannot
+    # starve the services it shares the machine with. Raise it if you run
+    # several services at once; project caps are enforced inside regardless.
+    mem_limit: ${QUAI_MEM_LIMIT:-2g}
+    cpus: ${QUAI_CPUS:-1.5}
+
+    entrypoint: ["/bin/sh", "-c"]
+    # dockerd has to be running before boot.sh can talk to it, and boot.sh has
+    # to be the process that stays in the foreground.
+    command:
+      - |
+        dockerd-entrypoint.sh dockerd >/var/log/dockerd.log 2>&1 &
+        exec /bin/sh /boot.sh
+
+    healthcheck:
+      # Asks the supervisor itself, through the inner daemon: a running dind
+      # with a dead Quai inside is not healthy.
+      test: ["CMD-SHELL", "docker exec quai curl -fsS -H \"Host: $$QUAI_ZONE\" http://localhost:8080/health | grep -q healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      # The first boot formats the XFS image and pulls the Quai image.
+      start_period: 180s
+
+volumes:
+  quai-data:
+  quai-docker:
