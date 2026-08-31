@@ -13,8 +13,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
-    "format": "oxfmt src packages/quai/src test",
-    "format:check": "oxfmt --check src packages/quai/src test",
+    "format": "oxfmt src packages/quai-types/src test",
+    "format:check": "oxfmt --check src packages/quai-types/src test",
     "check": "bun run lint && bun run format:check && bun run typecheck && bun test"
   },
   "devDependencies": {

@@ -88,6 +88,28 @@ The manifest is validated on deploy and every problem is reported at once, with
 the offending key named — a typo that silently does nothing is the hardest kind
 of mistake to find.
 
+### quai.config.ts
+
+A project that would rather keep its configuration in TypeScript can write a
+`quai.config.ts` (or `.js`, or `.mjs`) with a default export instead:
+
+```ts
+import { defineConfig } from "quai-types";
+
+export default defineConfig({
+  name: "my-api",
+  type: "service",
+  runtime: "node",
+  service: { internalPort: 8080, start: "node server.js" },
+  limits: { memory: "256Mi" },
+});
+```
+
+The two forms describe the same manifest and are validated the same way; the
+typed one spells its keys in camelCase because that is what the types say.
+When a directory has both, the config file wins — a project that added one
+meant to use it.
+
 ## Commands
 
 | | |
@@ -173,4 +195,3 @@ process.
 The isolation is a real boundary for ordinary code and a reasonable one for
 untrusted code, but the kernel is shared. Hosting genuinely hostile code would
 call for micro-VMs, which the `Runner` interface is shaped to allow later.
-

@@ -65,4 +65,13 @@ describe("collecting a directory", () => {
     expect(isSkipped("node_modules")).toBe(true);
     expect(isSkipped("index.html")).toBe(false);
   });
+
+  test("the manifest stays on the client, whichever form it takes", async () => {
+    await writeFile(join(dir, "quai.toml"), "type = 'static'");
+    await writeFile(join(dir, "quai.config.ts"), "export default {}");
+    await writeFile(join(dir, "quai.config.js"), "export default {}");
+    await writeFile(join(dir, "quai.config.mjs"), "export default {}");
+    await writeFile(join(dir, "index.html"), "hi");
+    expect((await collectFiles(dir)).map((f) => f.name)).toEqual(["index.html"]);
+  });
 });

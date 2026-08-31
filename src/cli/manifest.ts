@@ -148,8 +148,18 @@ export function parseDuration(value: string | undefined): number | undefined {
   return match[2] === "m" ? amount * 60 : amount;
 }
 
-export function resolveDeploySpec(files: Set<string>, manifestSource: string | null): DeploySpec {
-  const manifest = manifestSource === null ? null : parseQuaiToml(manifestSource);
+export function resolveDeploySpec(
+  files: Set<string>,
+  // Either raw TOML or an already-loaded manifest: a quai.config.ts is parsed
+  // by importing it, so it arrives here as an object.
+  manifestSource: string | Manifest | null,
+): DeploySpec {
+  const manifest =
+    manifestSource === null
+      ? null
+      : typeof manifestSource === "string"
+        ? parseQuaiToml(manifestSource)
+        : manifestSource;
   const detected = manifest === null ? detectProjectType(files) : null;
 
   if (manifest === null && detected === null) {

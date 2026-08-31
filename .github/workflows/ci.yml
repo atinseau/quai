@@ -42,7 +42,7 @@ jobs:
         run: bun run typecheck
 
       - name: The published types must compile on their own
-        working-directory: packages/quai
+        working-directory: packages/quai-types
         run: bun install && bunx tsc -p tsconfig.build.json
 
   unit:

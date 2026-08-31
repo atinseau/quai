@@ -147,15 +147,15 @@ jobs:
       - name: Match the package version to the tag
         # The types describe a specific release of the product, so publishing
         # them under a different number would make the pairing guesswork.
-        working-directory: packages/quai
+        working-directory: packages/quai-types
         run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version --allow-same-version
 
       - name: Build
-        working-directory: packages/quai
+        working-directory: packages/quai-types
         run: npm install && npm run build
 
       - name: Publish
-        working-directory: packages/quai
+        working-directory: packages/quai-types
         # Skipped rather than failed when no token is configured: the types are
         # a convenience, and a missing npm credential should not stop the image
         # and the CLI — the things an operator actually needs — from shipping.

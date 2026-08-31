@@ -19,6 +19,12 @@ const SKIPPED = new Set([
   ".env",
   ".env.local",
   "quai.toml",
+  // A manifest is read on this machine and travels as parsed metadata; the
+  // typed forms are configuration too, and a quai.config.ts left in the upload
+  // would sit unread in the project home.
+  "quai.config.ts",
+  "quai.config.js",
+  "quai.config.mjs",
 ]);
 
 export function isSkipped(name: string): boolean {

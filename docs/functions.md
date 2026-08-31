@@ -118,6 +118,22 @@ looking.
 handlers and on `quai.toml`. The helpers return their argument untouched, so
 the code that runs is the code you wrote.
 
+**A typed manifest.** The same package exports `defineConfig`, for projects
+that prefer their configuration in TypeScript. A `quai.config.ts` with a
+default export replaces `quai.toml` entirely:
+
+```ts
+import { defineConfig } from "quai-types";
+
+export default defineConfig({
+  type: "function",
+  runtime: "node",
+  limits: { timeout: "45s" },
+});
+```
+
+The CLI reads it on deploy and validates it exactly as it validates the TOML.
+
 ## When a function is the wrong shape
 
 A function is served per request, with its lifecycle managed for you. Reach for
@@ -136,4 +152,3 @@ start = "node server.js"
 
 A service listens on the port it declares. Two projects can both use 8080:
 each has its own network namespace, so there is nothing to coordinate.
-

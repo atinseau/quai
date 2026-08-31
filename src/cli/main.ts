@@ -7,17 +7,18 @@
  * is the project name, which is what makes redeploying idempotent.
  */
 
-import { readdir, readFile } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { collectFiles } from "./collect";
 import { formatEnvFile, isReservedEnvKey, parseEnvAssignment } from "./env";
 import { configPath, readConfig, writeConfig } from "./config";
+import { configFileIn, loadProjectConfig } from "./config-file";
 import { localRunPlan } from "./dev";
 import { renderQuaiToml } from "./init";
 import { latestReleaseUrl, releaseAssetUrl, targetTriple } from "./release";
 import { replaceRunningBinary, uninstallPlan } from "./self-update";
 import { deployQuery } from "./deploy-query";
-import { detectProjectType, resolveDeploySpec, type DeploySpec } from "./manifest";
+import { detectProjectType, resolveDeploySpec, type DeploySpec, type Manifest } from "./manifest";
 import { projectNameFromPath } from "../supervisor/naming";
 import { packTar } from "../supervisor/tar";
 
@@ -26,8 +27,12 @@ function fail(message: string): never {
   process.exit(1);
 }
 
-async function readManifest(directory: string): Promise<string | null> {
-  return readFile(join(directory, "quai.toml"), "utf8").catch(() => null);
+async function readManifest(directory: string): Promise<Manifest | null> {
+  try {
+    return await loadProjectConfig(directory);
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
+  }
 }
 
 /** Runs the build the manifest declares, on this machine. */
@@ -204,14 +209,10 @@ async function removeCommand(directory: string): Promise<void> {
 
 async function init(directory: string): Promise<void> {
   const root = resolve(directory);
-  const path = join(root, "quai.toml");
+  const existing = await configFileIn(root);
 
-  if (
-    await readFile(path, "utf8")
-      .then(() => true)
-      .catch(() => false)
-  ) {
-    fail("quai.toml already exists here");
+  if (existing !== null) {
+    fail(existing + " already exists here");
   }
 
   const files = new Set(await readdir(root));
@@ -224,7 +225,7 @@ async function init(directory: string): Promise<void> {
     start: detected?.runtime === "python" ? "python3 main.py" : "node server.js",
   });
 
-  await Bun.write(path, rendered);
+  await Bun.write(join(root, "quai.toml"), rendered);
   console.log("Wrote quai.toml (" + (detected?.type ?? "static") + "). Edit it, then run 'quai'.");
 }
 

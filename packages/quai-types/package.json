@@ -6,7 +6,7 @@
   "repository": {
     "type": "git",
     "url": "git+https://github.com/atinseau/quai.git",
-    "directory": "packages/quai"
+    "directory": "packages/quai-types"
   },
   "keywords": [
     "quai",
