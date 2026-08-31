@@ -150,13 +150,22 @@ jobs:
 
       - name: Publish
         working-directory: packages/quai
-        run: npm publish --access public --provenance
+        # Skipped rather than failed when no token is configured: the types are
+        # a convenience, and a missing npm credential should not stop the image
+        # and the CLI — the things an operator actually needs — from shipping.
+        run: |
+          if [ -z "${NODE_AUTH_TOKEN}" ]; then
+            echo "::warning::NPM_TOKEN is not set; skipping the types package."
+            exit 0
+          fi
+          npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   publish:
     name: Publish the release
-    needs: [image, cli, npm]
+    # The npm job is advisory; a missing token must not hold the release.
+    needs: [image, cli]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
