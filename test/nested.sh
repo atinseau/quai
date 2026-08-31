@@ -15,6 +15,8 @@ IMAGE="${1:-ghcr.io/atinseau/quai:latest}"
 NAME="quai-nested-test"
 PORT="${QUAI_NESTED_PORT:-18110}"
 ZONE="quai.test"
+DATA_VOLUME="quai-nested-data"
+DOCKER_VOLUME="quai-nested-docker"
 
 PASS=0
 FAIL=0
@@ -24,7 +26,10 @@ sect() { echo; echo "== $1"; }
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
-cleanup() { docker rm -f "$NAME" >/dev/null 2>&1; }
+cleanup() {
+  docker rm -f "$NAME" >/dev/null 2>&1
+  docker volume rm "$DATA_VOLUME" "$DOCKER_VOLUME" >/dev/null 2>&1
+}
 trap cleanup EXIT
 
 # The compose file's own shape is checked by CI; what needs proving here is
@@ -33,11 +38,23 @@ trap cleanup EXIT
 sect "starting a nested host"
 cleanup
 
+# The same volumes deploy/nested/compose.yaml declares.
+#
+# The XFS image cannot live on the container's own overlayfs: a loop mount of a
+# file on overlay fails with a bare 'Invalid argument', which reads like a
+# corrupt filesystem rather than an unsupported location. This is exactly what
+# CI hit while a developer machine — whose Docker storage sits on btrfs —
+# passed, so the test now mirrors the deployment instead of approximating it.
+docker volume create "$DATA_VOLUME" >/dev/null
+docker volume create "$DOCKER_VOLUME" >/dev/null
+
 docker run -d --name "$NAME" --privileged \
   -e DOCKER_TLS_CERTDIR= \
   -e QUAI_IMAGE="$IMAGE" \
   -e QUAI_ZONE="$ZONE" \
   -e QUAI_HOMES_SIZE=2 \
+  -v "$DATA_VOLUME:/quai-data" \
+  -v "$DOCKER_VOLUME:/var/lib/docker" \
   -v "$ROOT/deploy/nested/boot.sh:/boot.sh:ro" \
   -p "$PORT:8080" \
   docker:29-dind /bin/sh -c \
