@@ -34,4 +34,3 @@ export async function writeConfig(config: ClientConfig): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   await writeFile(path, JSON.stringify(config, null, 2), { mode: 0o600 });
 }
-

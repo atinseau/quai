@@ -43,7 +43,7 @@ const endpoint = ENDPOINTS[action]!;
 const body = endpoint.method === "POST" ? await Bun.stdin.text() : undefined;
 
 const response = await fetch(
-  SUPERVISOR + endpoint.path + '?project=' + encodeURIComponent(project),
+  SUPERVISOR + endpoint.path + "?project=" + encodeURIComponent(project),
   {
     method: endpoint.method,
     headers: { "x-quai-token": TOKEN, "content-type": "application/json" },
@@ -52,6 +52,6 @@ const response = await fetch(
 );
 
 const text = await response.text();
-if (!response.ok) refuse(text || action + ' failed with status ' + response.status);
+if (!response.ok) refuse(text || action + " failed with status " + response.status);
 
 process.stdout.write(text);

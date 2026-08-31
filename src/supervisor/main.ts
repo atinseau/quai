@@ -8,13 +8,7 @@
 import { existsSync } from "node:fs";
 import { chmod, mkdir, readFile, readdir, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import {
-  createAccount,
-  homeFor,
-  prepareHome,
-  readAccounts,
-  removeAccount,
-} from "./accounts";
+import { createAccount, homeFor, prepareHome, readAccounts, removeAccount } from "./accounts";
 import { buildHealthReport } from "./health";
 import { deployArchive, type DeploySpec } from "./ingest";
 import { LinuxRunner, SECCOMP_POLICY_PATH } from "./linux-runner";
@@ -134,9 +128,7 @@ const deployDeps = {
       if (!result.ok) {
         // Refusing the deploy is right: without a quota the project could fill
         // the volume every other project depends on.
-        throw new Error(
-          "Could not apply the disk quota for '" + project + "': " + result.stderr,
-        );
+        throw new Error("Could not apply the disk quota for '" + project + "': " + result.stderr);
       }
     }
   },
@@ -178,9 +170,7 @@ for (const project of store.list()) {
 const REVIVE_INTERVAL_MS = 5_000;
 setInterval(() => {
   void projects
-    .reviveCrashed(Date.now, (project, reason) =>
-      console.error(`project '${project}' ${reason}`),
-    )
+    .reviveCrashed(Date.now, (project, reason) => console.error(`project '${project}' ${reason}`))
     .catch((error: Error) => console.error("revive pass failed: " + error.message));
 }, REVIVE_INTERVAL_MS);
 
@@ -210,9 +200,7 @@ Bun.serve({
       const declaredLimits = {
         memory: url.searchParams.get("memory") ?? undefined,
         cpu: url.searchParams.get("cpu") ?? undefined,
-        pids: url.searchParams.has("pids")
-          ? Number(url.searchParams.get("pids"))
-          : undefined,
+        pids: url.searchParams.has("pids") ? Number(url.searchParams.get("pids")) : undefined,
       };
 
       const spec: DeploySpec = {
@@ -354,15 +342,15 @@ Bun.serve({
       // echoed from configuration: an operator diagnosing odd behaviour needs
       // the effective limits, not the intended ones.
       const containerCgroup = await containerCgroupPath();
-      const quotaReport = await readCommand([
-        "xfs_quota", "-x", "-c", "report -p -N -b", HOMES,
-      ]);
+      const quotaReport = await readCommand(["xfs_quota", "-x", "-c", "report -p -N -b", HOMES]);
 
       const states = await Promise.all(
         store.list().map(async (project) => {
           const cgroup = containerCgroup + "/quai-" + project.name;
           const readLimit = (file: string) =>
-            readFile(join(cgroup, file), "utf8").then((v) => v.trim()).catch(() => null);
+            readFile(join(cgroup, file), "utf8")
+              .then((v) => v.trim())
+              .catch(() => null);
 
           const quotaLine = quotaReport
             .split("\n")
@@ -406,17 +394,17 @@ Bun.serve({
           return null;
         }
       },
-      proxy: async (request, target) => {
-        const url = new URL(request.url);
-        url.protocol = "http:";
+      proxy: async (incoming, target) => {
+        const target_url = new URL(incoming.url);
+        target_url.protocol = "http:";
         // Reach the service at its own end of the veth pair: its port lives
         // in its namespace, not on the supervisor loopback.
         const address = runner.addressFor(target.project) ?? "127.0.0.1";
-        url.host = address + ":" + target.port;
-        return fetch(url.toString(), {
-          method: request.method,
-          headers: request.headers,
-          body: request.body,
+        target_url.host = address + ":" + target.port;
+        return fetch(target_url.toString(), {
+          method: incoming.method,
+          headers: incoming.headers,
+          body: incoming.body,
         });
       },
     });
@@ -426,4 +414,3 @@ Bun.serve({
 const versions = runtimes.map((r) => `${r.name} ${r.version ?? "absent"}`).join(", ");
 console.log(`quai supervisor on :${PORT} — zone ${ZONE} — runtimes: ${versions}`);
 console.log(`${store.list().length} project(s) restored`);
-

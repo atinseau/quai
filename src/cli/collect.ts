@@ -48,6 +48,5 @@ export async function collectFiles(directory: string): Promise<TarEntry[]> {
   }
 
   await walk(directory);
-  return entries.sort((a, b) => a.name.localeCompare(b.name));
+  return entries.toSorted((a, b) => a.name.localeCompare(b.name));
 }
-

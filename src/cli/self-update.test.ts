@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { chmod, mkdir, mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { replaceRunningBinary, uninstallPlan } from "./self-update";
@@ -47,9 +47,7 @@ describe("replacing the binary that is running", () => {
     const current = join(dir, "quai");
     await writeFile(current, "old");
 
-    await expect(
-      replaceRunningBinary(current, join(dir, "does-not-exist")),
-    ).rejects.toThrow();
+    await expect(replaceRunningBinary(current, join(dir, "does-not-exist"))).rejects.toThrow();
     expect(await readFile(current, "utf8")).toBe("old");
   });
 
@@ -91,4 +89,3 @@ describe("uninstalling", () => {
     }
   });
 });
-

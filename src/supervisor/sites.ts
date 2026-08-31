@@ -78,4 +78,3 @@ export class SiteStore implements SiteStorage {
     await rm(this.rootFor(project), { recursive: true, force: true });
   }
 }
-

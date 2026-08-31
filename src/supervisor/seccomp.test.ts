@@ -1,10 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  SeccompProfile,
-  DENIED_SYSCALLS,
-  buildJailArgs,
-  resolveExecutable,
-} from "./seccomp";
+import { SeccompProfile, DENIED_SYSCALLS, buildJailArgs, resolveExecutable } from "./seccomp";
 
 const profile = new SeccompProfile();
 
@@ -108,7 +103,6 @@ describe("wrapping a command", () => {
   });
 });
 
-
 describe("resolving the executable", () => {
   const exists = (path: string) => path === "/usr/bin/node" || path === "/usr/local/bin/bun";
 
@@ -134,7 +128,6 @@ describe("resolving the executable", () => {
     expect(resolveExecutable("nowhere", exists)).toBe("nowhere");
   });
 });
-
 
 describe("working directory", () => {
   test("the project's home is passed to nsjail", () => {
@@ -163,7 +156,6 @@ describe("working directory", () => {
   });
 });
 
-
 describe("environment inside the jail", () => {
   const args = buildJailArgs({
     policyPath: "/p",
@@ -190,4 +182,3 @@ describe("environment inside the jail", () => {
     expect(bare).not.toContain("--env");
   });
 });
-

@@ -55,9 +55,9 @@ describe("site store", () => {
   });
 
   test("an archive escaping its project is refused", async () => {
-    await expect(
-      store.publish("my-site", [entry("../../etc/passwd", "pwned")]),
-    ).rejects.toThrow(/escape/i);
+    await expect(store.publish("my-site", [entry("../../etc/passwd", "pwned")])).rejects.toThrow(
+      /escape/i,
+    );
   });
 
   test("a failed deploy leaves no staging directory behind", async () => {
@@ -82,4 +82,3 @@ describe("site store", () => {
     expect(a).toBe("a");
   });
 });
-

@@ -62,4 +62,3 @@ export function projectFor(host: string, zone: string): string | null {
 
   return label;
 }
-

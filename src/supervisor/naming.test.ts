@@ -100,4 +100,3 @@ describe("subdomain routing", () => {
     expect(projectFor("site.evilquai.example.com", "quai.example.com")).toBeNull();
   });
 });
-

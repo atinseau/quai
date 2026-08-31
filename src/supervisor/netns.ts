@@ -70,17 +70,49 @@ export class NetworkNamespace {
     return [
       ["ip", "netns", "add", this.name],
       // A veth pair is the wire: one end stays here, the other moves inside.
-      ["ip", "link", "add", this.hostInterface, "type", "veth", "peer", "name", this.projectInterface],
+      [
+        "ip",
+        "link",
+        "add",
+        this.hostInterface,
+        "type",
+        "veth",
+        "peer",
+        "name",
+        this.projectInterface,
+      ],
       ["ip", "link", "set", this.projectInterface, "netns", this.name],
       ["ip", "addr", "add", this.subnet.hostAddress + mask, "dev", this.hostInterface],
       ["ip", "link", "set", this.hostInterface, "up"],
       // Loopback is down by default in a fresh namespace, so a service binding
       // 127.0.0.1 would fail without this.
       ["ip", "netns", "exec", this.name, "ip", "link", "set", "lo", "up"],
-      ["ip", "netns", "exec", this.name, "ip", "addr", "add", this.subnet.projectAddress + mask, "dev", this.projectInterface],
+      [
+        "ip",
+        "netns",
+        "exec",
+        this.name,
+        "ip",
+        "addr",
+        "add",
+        this.subnet.projectAddress + mask,
+        "dev",
+        this.projectInterface,
+      ],
       ["ip", "netns", "exec", this.name, "ip", "link", "set", this.projectInterface, "up"],
       // Default route out through the supervisor end.
-      ["ip", "netns", "exec", this.name, "ip", "route", "add", "default", "via", this.subnet.hostAddress],
+      [
+        "ip",
+        "netns",
+        "exec",
+        this.name,
+        "ip",
+        "route",
+        "add",
+        "default",
+        "via",
+        this.subnet.hostAddress,
+      ],
     ];
   }
 
@@ -94,4 +126,3 @@ export class NetworkNamespace {
     return ["ip", "netns", "exec", this.name, ...command];
   }
 }
-

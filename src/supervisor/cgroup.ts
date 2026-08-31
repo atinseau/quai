@@ -117,4 +117,3 @@ export class ProjectCgroup {
     return { file: "cgroup.procs", value: String(pid) };
   }
 }
-

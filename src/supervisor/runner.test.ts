@@ -118,7 +118,7 @@ describe("project supervision", () => {
   test("running projects are listed", async () => {
     await supervisor.start(spec("alpha"));
     await supervisor.start(spec("beta"));
-    expect(supervisor.running().sort()).toEqual(["alpha", "beta"]);
+    expect(supervisor.running().toSorted()).toEqual(["alpha", "beta"]);
   });
 
   test("stopping everything leaves nothing running", async () => {
@@ -128,4 +128,3 @@ describe("project supervision", () => {
     expect(supervisor.running()).toEqual([]);
   });
 });
-

@@ -16,7 +16,7 @@ describe("generating a quai.toml", () => {
       start: "node server.js",
       internalPort: 3000,
     });
-    expect(rendered).toContain("start = \"node server.js\"");
+    expect(rendered).toContain('start = "node server.js"');
     expect(rendered).toContain("internal_port = 3000");
   });
 
@@ -60,7 +60,6 @@ describe("generating a quai.toml", () => {
   });
 });
 
-
 describe("what init generates is always accepted", () => {
   const { parseQuaiToml } = require("./manifest");
 
@@ -98,4 +97,3 @@ describe("what init generates is always accepted", () => {
     ).not.toThrow();
   });
 });
-

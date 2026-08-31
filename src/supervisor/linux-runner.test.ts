@@ -98,4 +98,3 @@ describe("launching inside a namespace", () => {
     expect(alpha.internalPort).toBe(beta.internalPort);
   });
 });
-

@@ -31,4 +31,3 @@ export function safeExtractPath(root: string, entryName: string): string {
 
   return destination;
 }
-

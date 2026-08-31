@@ -76,9 +76,7 @@ export async function restoreBackup(store: Store, backup: Backup): Promise<void>
 
       for (const [key, value] of Object.entries(backup.env[project.name] ?? {})) {
         if (typeof value !== "string") {
-          throw new Error(
-            `Backup is malformed: ${project.name}.${key} is not a string`,
-          );
+          throw new Error(`Backup is malformed: ${project.name}.${key} is not a string`);
         }
         store.setEnv(project.name, key, value);
       }
@@ -87,4 +85,3 @@ export async function restoreBackup(store: Store, backup: Backup): Promise<void>
     }
   });
 }
-

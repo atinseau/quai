@@ -8,7 +8,7 @@
  */
 
 import { readdir, readFile } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { collectFiles } from "./collect";
 import { formatEnvFile, isReservedEnvKey, parseEnvAssignment } from "./env";
 import { configPath, readConfig, writeConfig } from "./config";
@@ -94,18 +94,13 @@ async function deploy(directory: string, production = false): Promise<void> {
   console.log(out.trim());
 }
 
-
 /**
  * Runs an administrative command against the instance.
  *
  * It travels the same authenticated SSH channel as a deploy, so there is no
  * second credential to manage and no port to expose.
  */
-async function admin(
-  action: string,
-  project: string,
-  body?: unknown,
-): Promise<string> {
+async function admin(action: string, project: string, body?: unknown): Promise<string> {
   const config = await readConfig();
   if (config === null) fail("not logged in. Run 'quai login <user@host> <zone>' first.");
 
@@ -133,7 +128,7 @@ async function envCommand(args: string[], directory: string): Promise<void> {
     case undefined:
     case "ls": {
       const variables = JSON.parse(await admin("env-get", project)) as Record<string, string>;
-      const keys = Object.keys(variables).sort();
+      const keys = Object.keys(variables).toSorted();
       if (keys.length === 0) console.log("No variables set for " + project);
       for (const key of keys) console.log(key + "=" + variables[key]);
       break;
@@ -197,7 +192,7 @@ async function logsCommand(args: string[]): Promise<void> {
       process.stdout.write(current);
     }
     seen = current;
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    await new Promise((done) => setTimeout(done, 1000));
   }
 }
 
@@ -211,7 +206,11 @@ async function init(directory: string): Promise<void> {
   const root = resolve(directory);
   const path = join(root, "quai.toml");
 
-  if (await readFile(path, "utf8").then(() => true).catch(() => false)) {
+  if (
+    await readFile(path, "utf8")
+      .then(() => true)
+      .catch(() => false)
+  ) {
     fail("quai.toml already exists here");
   }
 
@@ -251,9 +250,14 @@ async function listCommand(): Promise<void> {
     const state = project.givenUp ? "given up" : project.run.state;
     console.log(
       project.name.padEnd(width) +
-        "  " + project.type.padEnd(8) +
-        "  " + state.padEnd(9) +
-        "  https://" + project.name + "." + config.zone,
+        "  " +
+        project.type.padEnd(8) +
+        "  " +
+        state.padEnd(9) +
+        "  https://" +
+        project.name +
+        "." +
+        config.zone,
     );
   }
 }
@@ -290,7 +294,9 @@ async function restoreCommand(args: string[]): Promise<void> {
   const path = args.find((argument) => !argument.startsWith("-"));
   if (path === undefined) fail("usage: quai restore <backup.json>");
 
-  const contents = await Bun.file(path).text().catch(() => null);
+  const contents = await Bun.file(path)
+    .text()
+    .catch(() => null);
   if (contents === null) fail(`could not read ${path}`);
 
   const parsed = JSON.parse(contents) as { projects: { name: string }[]; takenAt: number };
@@ -349,7 +355,10 @@ async function updateCommand(args: string[]): Promise<void> {
     return;
   }
 
-  const target = targetTriple(process.platform === "darwin" ? "Darwin" : "Linux", process.arch === "arm64" ? "arm64" : "x86_64");
+  const target = targetTriple(
+    process.platform === "darwin" ? "Darwin" : "Linux",
+    process.arch === "arm64" ? "arm64" : "x86_64",
+  );
   const current = process.execPath;
   const staged = current + ".new";
 
@@ -367,7 +376,9 @@ async function updateCommand(args: string[]): Promise<void> {
   const probe = Bun.spawn([staged, "--version"], { stdout: "pipe", stderr: "pipe" });
   await probe.exited;
   if (probe.exitCode !== 0) {
-    await Bun.file(staged).delete().catch(() => {});
+    await Bun.file(staged)
+      .delete()
+      .catch(() => {});
     fail("the downloaded binary does not run; nothing was changed");
   }
 
@@ -436,7 +447,9 @@ async function devCommand(args: string[]): Promise<void> {
       port,
       async fetch(request) {
         const path = new URL(request.url).pathname;
-        const file = Bun.file(join(directoryToServe, path.endsWith("/") ? path + "index.html" : path));
+        const file = Bun.file(
+          join(directoryToServe, path.endsWith("/") ? path + "index.html" : path),
+        );
         return (await file.exists())
           ? new Response(file)
           : new Response("Not found", { status: 404 });
@@ -553,4 +566,3 @@ switch (command) {
   default:
     fail(`unknown command '${command}'. Try 'quai help'.`);
 }
-

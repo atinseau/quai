@@ -91,4 +91,3 @@ describe("pulling variables into a local file", () => {
     expect(formatEnvFile({})).toBe("");
   });
 });
-

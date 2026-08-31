@@ -88,4 +88,3 @@ describe("namespace commands", () => {
     expect(ns.wrapCommand(["node", "server.js"]).slice(-2)).toEqual(["node", "server.js"]);
   });
 });
-

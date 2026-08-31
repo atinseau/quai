@@ -18,7 +18,7 @@ let resolved: string | null = null;
 /** Extracts the cgroup v2 path from a /proc/self/cgroup body. */
 export function parseOwnCgroup(contents: string): string {
   const line = contents.split("\n").find((l) => l.startsWith("0::"));
-  return line === undefined ? "/" : (line.slice("0::".length).trim() || "/");
+  return line === undefined ? "/" : line.slice("0::".length).trim() || "/";
 }
 
 /**
@@ -49,4 +49,3 @@ export async function containerCgroupPath(): Promise<string> {
 export function resetContainerCgroupCache(): void {
   resolved = null;
 }
-

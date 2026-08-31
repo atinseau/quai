@@ -37,8 +37,7 @@ if (archive.length === 0) {
 }
 
 const response = await fetch(
-  `${SUPERVISOR}/_quai/deploy?project=${encodeURIComponent(project)}` +
-    (query ? "&" + query : ""),
+  `${SUPERVISOR}/_quai/deploy?project=${encodeURIComponent(project)}` + (query ? "&" + query : ""),
   {
     method: "POST",
     headers: { "x-quai-token": TOKEN, "content-type": "application/x-tar" },
@@ -54,4 +53,3 @@ if (!response.ok) {
 
 console.log(`Deployed ${payload.files} file(s)`);
 console.log(payload.url);
-

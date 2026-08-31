@@ -38,4 +38,3 @@ export function resolveStaticFile(root: string, requestPath: string): string | n
 
   return destination;
 }
-

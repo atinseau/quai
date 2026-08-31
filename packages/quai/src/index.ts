@@ -36,10 +36,7 @@ export type QuaiResponse = {
  * Quai supplies the server; the handler decides what a request produces. It
  * may be exported as `default` or as `handler`.
  */
-export type QuaiHandler = (
-  request: QuaiRequest,
-  response: QuaiResponse,
-) => void | Promise<void>;
+export type QuaiHandler = (request: QuaiRequest, response: QuaiResponse) => void | Promise<void>;
 
 /** A Bun function, written against the platform's fetch-style handler. */
 export type QuaiBunHandler = (request: Request) => Response | Promise<Response>;
@@ -102,4 +99,3 @@ export type QuaiConfig = {
 export function defineConfig(config: QuaiConfig): QuaiConfig {
   return config;
 }
-

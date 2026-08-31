@@ -19,7 +19,9 @@ const handler = loaded.default ?? loaded.handler;
 
 if (typeof handler !== "function") {
   console.error(
-    "quai: " + handlerPath + " must export a handler function, " +
+    "quai: " +
+      handlerPath +
+      " must export a handler function, " +
       "either as the default export or as 'handler'.",
   );
   process.exit(1);
@@ -60,4 +62,3 @@ createServer((request, response) => {
 }).listen(port, "0.0.0.0", () => {
   console.log("quai function host listening on " + port);
 });
-

@@ -73,4 +73,3 @@ export function decideRestart(history: RestartHistory, now: number): RestartDeci
 
   return waited >= delay ? { action: "restart" } : { action: "wait", delayMs: delay - waited };
 }
-

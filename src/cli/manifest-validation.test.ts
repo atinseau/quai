@@ -113,4 +113,3 @@ describe("a wrong manifest says which key is wrong", () => {
     expect(messageFor('type = "magic"')).toMatch(/quai\.toml/i);
   });
 });
-

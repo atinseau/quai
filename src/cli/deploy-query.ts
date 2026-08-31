@@ -38,4 +38,3 @@ export function deployQuery(spec: DeploySpec, options: DeployOptions = {}): URLS
 
   return query;
 }
-

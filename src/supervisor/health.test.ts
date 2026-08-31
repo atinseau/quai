@@ -21,7 +21,7 @@ describe("health endpoint", () => {
       isolation: { supported: true, failures: [] },
       runtimes,
     });
-    expect(report.runtimes.map((r) => r.name).sort()).toEqual(["bun", "node", "python"]);
+    expect(report.runtimes.map((r) => r.name).toSorted()).toEqual(["bun", "node", "python"]);
   });
 
   test("is unhealthy when an isolation guarantee is missing", () => {
@@ -74,4 +74,3 @@ describe("health endpoint", () => {
     expect(report.status).toBe("degraded");
   });
 });
-

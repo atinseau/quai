@@ -55,4 +55,3 @@ describe("release urls", () => {
     expect(releaseAssetUrl("me/my-tool", "v1", "quai-linux-x64")).toContain("me/my-tool");
   });
 });
-

@@ -49,4 +49,3 @@ describe("static file resolution", () => {
     expect(resolveStaticFile(ROOT, "/index.html\u0000.txt")).toBeNull();
   });
 });
-

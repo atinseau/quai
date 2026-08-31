@@ -104,4 +104,3 @@ export async function removeAccount(project: string): Promise<void> {
   const { rm } = await import("node:fs/promises");
   await rm(homeFor(project), { recursive: true, force: true }).catch(() => {});
 }
-

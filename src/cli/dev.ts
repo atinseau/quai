@@ -59,7 +59,7 @@ export function localRunPlan(spec: DeploySpec, options: LocalRunOptions): LocalR
 
   // On the server each project owns a network namespace, so its declared port
   // is free. On a laptop they share one, so the developer picks the port.
-  const env: Record<string, string> = { ...(spec.env ?? {}), PORT: String(options.port) };
+  const env: Record<string, string> = { ...spec.env, PORT: String(options.port) };
 
   if (spec.type === "function") {
     const runtime = spec.runtime ?? "node";
@@ -81,4 +81,3 @@ export function localRunPlan(spec: DeploySpec, options: LocalRunOptions): LocalR
     serveStatic: null,
   };
 }
-

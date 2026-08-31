@@ -50,4 +50,3 @@ describe("recovering the container root after relocation", () => {
     expect(containerRootOf("/")).toBe("/");
   });
 });
-

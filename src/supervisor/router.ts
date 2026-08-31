@@ -58,10 +58,7 @@ function contentTypeFor(path: string): string {
 
 const notFound = () => new Response("Not found", { status: 404 });
 
-export async function handleRequest(
-  request: Request,
-  context: RouterContext,
-): Promise<Response> {
+export async function handleRequest(request: Request, context: RouterContext): Promise<Response> {
   const host = request.headers.get("host") ?? "";
   const url = new URL(request.url);
   const hostname = host.toLowerCase().split(":")[0] ?? "";
@@ -110,4 +107,3 @@ export async function handleRequest(
 
   return new Response(body, { headers: { "content-type": contentTypeFor(filePath) } });
 }
-

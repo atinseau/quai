@@ -42,4 +42,3 @@ describe("archive extraction paths", () => {
     expect(() => safeExtractPath(ROOT, "")).toThrow();
   });
 });
-

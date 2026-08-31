@@ -9,10 +9,18 @@
   "scripts": {
     "start": "bun run src/supervisor/main.ts",
     "test": "bun test",
-    "typecheck": "tsc --noEmit"
+    "test:integration": "bash test/integration.sh quai:integration",
+    "typecheck": "tsc --noEmit",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
+    "format": "oxfmt src packages/quai/src test",
+    "format:check": "oxfmt --check src packages/quai/src test",
+    "check": "bun run lint && bun run format:check && bun run typecheck && bun test"
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "oxfmt": "^0.65.0",
+    "oxlint": "^1.80.0",
     "typescript": "^5"
   },
   "dependencies": {

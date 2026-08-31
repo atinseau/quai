@@ -23,11 +23,14 @@ function systemWith(overrides: Partial<SystemState> = {}): SystemState {
 describe("reconciliation", () => {
   test("a project recorded but absent from the system is recreated", async () => {
     const created: { name: string; uid: number }[] = [];
-    const report = await reconcile([project("alpha", 10000)], systemWith({
-      createAccount: async (name, uid) => {
-        created.push({ name, uid });
-      },
-    }));
+    const report = await reconcile(
+      [project("alpha", 10000)],
+      systemWith({
+        createAccount: async (name, uid) => {
+          created.push({ name, uid });
+        },
+      }),
+    );
 
     expect(created).toEqual([{ name: "alpha", uid: 10000 }]);
     expect(report.recreated).toEqual(["alpha"]);
@@ -46,11 +49,14 @@ describe("reconciliation", () => {
     // Files on the quota volume are owned by uid; a different uid would leave
     // the project unable to read its own deploy.
     let seen = -1;
-    await reconcile([project("alpha", 10042)], systemWith({
-      createAccount: async (_name, uid) => {
-        seen = uid;
-      },
-    }));
+    await reconcile(
+      [project("alpha", 10042)],
+      systemWith({
+        createAccount: async (_name, uid) => {
+          seen = uid;
+        },
+      }),
+    );
     expect(seen).toBe(10042);
   });
 
@@ -88,11 +94,14 @@ describe("reconciliation", () => {
   });
 
   test("a failure is reported with its cause", async () => {
-    const report = await reconcile([project("alpha", 10000)], systemWith({
-      createAccount: async () => {
-        throw new Error("useradd: uid already in use");
-      },
-    }));
+    const report = await reconcile(
+      [project("alpha", 10000)],
+      systemWith({
+        createAccount: async () => {
+          throw new Error("useradd: uid already in use");
+        },
+      }),
+    );
     expect(report.discrepancies.some((d) => d.includes("uid already in use"))).toBe(true);
   });
 
@@ -101,4 +110,3 @@ describe("reconciliation", () => {
     expect(report).toMatchObject({ recreated: [], failed: [], discrepancies: [] });
   });
 });
-

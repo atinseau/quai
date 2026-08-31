@@ -77,9 +77,7 @@ export class Store {
         project TEXT NOT NULL REFERENCES projects(name) ON DELETE CASCADE
       );
     `);
-    this.database.run("INSERT OR IGNORE INTO uid_watermark (id, next) VALUES (1, ?)", [
-      FIRST_UID,
-    ]);
+    this.database.run("INSERT OR IGNORE INTO uid_watermark (id, next) VALUES (1, ?)", [FIRST_UID]);
   }
 
   /** Runs a unit of work atomically; nothing is committed if it throws. */
@@ -89,14 +87,18 @@ export class Store {
 
   lookup(name: string): StoredProject | null {
     const row = this.database
-      .query("SELECT name, type, uid, internal_port, command, netns_index FROM projects WHERE name = ?")
+      .query(
+        "SELECT name, type, uid, internal_port, command, netns_index FROM projects WHERE name = ?",
+      )
       .get(name) as ProjectRow | null;
     return row === null ? null : toProject(row);
   }
 
   list(): StoredProject[] {
     const rows = this.database
-      .query("SELECT name, type, uid, internal_port, command, netns_index FROM projects ORDER BY name")
+      .query(
+        "SELECT name, type, uid, internal_port, command, netns_index FROM projects ORDER BY name",
+      )
       .all() as ProjectRow[];
     return rows.map(toProject);
   }
@@ -141,10 +143,9 @@ export class Store {
 
     // Keep the watermark ahead of every restored uid, so a new project cannot
     // be handed one that a restored project already owns.
-    this.database.run(
-      "UPDATE uid_watermark SET next = MAX(next, ?) WHERE id = 1",
-      [project.uid + 1],
-    );
+    this.database.run("UPDATE uid_watermark SET next = MAX(next, ?) WHERE id = 1", [
+      project.uid + 1,
+    ]);
   }
 
   removeProject(name: string): void {
@@ -164,9 +165,9 @@ export class Store {
         .get(name) as { uid: number } | null;
       if (existing !== null) return existing.uid;
 
-      const { next } = this.database
-        .query("SELECT next FROM uid_watermark WHERE id = 1")
-        .get() as { next: number };
+      const { next } = this.database.query("SELECT next FROM uid_watermark WHERE id = 1").get() as {
+        next: number;
+      };
 
       this.database.run("UPDATE uid_watermark SET next = ? WHERE id = 1", [next + 1]);
       this.database.run(
@@ -176,7 +177,7 @@ export class Store {
       );
       // The netns index follows the uid, so wiring is stable across restarts.
       this.database.run(
-        'UPDATE projects SET netns_index = ? WHERE name = ? AND netns_index IS NULL',
+        "UPDATE projects SET netns_index = ? WHERE name = ? AND netns_index IS NULL",
         [next - FIRST_UID, name],
       );
       return next;
@@ -233,4 +234,3 @@ export class Store {
 export function openStore(path: string): Store {
   return new Store(new Database(path, { create: true }));
 }
-

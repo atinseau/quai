@@ -150,9 +150,7 @@ export function checkIsolationSupport(probe: SystemProbe): PreflightResult {
     });
   }
 
-  const missingCapabilities = REQUIRED_CAPABILITIES.filter(
-    (c) => !probe.capabilities.includes(c),
-  );
+  const missingCapabilities = REQUIRED_CAPABILITIES.filter((c) => !probe.capabilities.includes(c));
   if (missingCapabilities.length > 0) {
     failures.push({
       requirement: "capabilities",
@@ -167,10 +165,7 @@ export function checkIsolationSupport(probe: SystemProbe): PreflightResult {
 
 /** Renders a preflight failure as an operator-facing startup error. */
 export function formatFailures(failures: Failure[]): string {
-  const lines = [
-    "Quai refuses to start: this host cannot enforce project isolation.",
-    "",
-  ];
+  const lines = ["Quai refuses to start: this host cannot enforce project isolation.", ""];
   for (const failure of failures) {
     lines.push(`  [${failure.requirement}] ${failure.guarantee}`);
     lines.push(`      found:  ${failure.observed}`);
@@ -179,4 +174,3 @@ export function formatFailures(failures: Failure[]): string {
   }
   return lines.join("\n");
 }
-

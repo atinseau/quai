@@ -64,7 +64,6 @@ describe("egress rules", () => {
   });
 });
 
-
 describe("internet access", () => {
   test("masquerading is installed for the Quai veth range", () => {
     // Without NAT a project's packets leave with a 10.83 source address that
@@ -97,4 +96,3 @@ describe("internet access", () => {
     expect(natCommands().some((c) => c.includes("-C"))).toBe(true);
   });
 });
-

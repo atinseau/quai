@@ -30,7 +30,8 @@ Bun.serve({
     // connection open indefinitely.
     const timeout = new Promise<Response>((resolveTimeout) =>
       setTimeout(
-        () => resolveTimeout(new Response(`Function timed out after ${timeoutMs}ms`, { status: 504 })),
+        () =>
+          resolveTimeout(new Response(`Function timed out after ${timeoutMs}ms`, { status: 504 })),
         timeoutMs,
       ),
     );
@@ -45,4 +46,3 @@ Bun.serve({
 });
 
 console.log(`quai function host listening on ${port}`);
-

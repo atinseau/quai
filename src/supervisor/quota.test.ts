@@ -63,7 +63,6 @@ describe("reading usage back", () => {
   });
 });
 
-
 describe("quota ordering", () => {
   test("the directory a quota applies to is exposed, so it can be created first", () => {
     // xfs_quota marks an existing tree. Marking a missing path silently leaves
@@ -78,7 +77,6 @@ describe("quota ordering", () => {
     expect(marking).toContain(quota.directory);
   });
 });
-
 
 describe("quota follows the content, whatever its shape", () => {
   test("a static project is capped where its files live", () => {
@@ -104,4 +102,3 @@ describe("quota follows the content, whatever its shape", () => {
     expect(quota.releaseCommands()[0]!.join(" ")).toContain("bhard=0");
   });
 });
-

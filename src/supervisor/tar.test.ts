@@ -55,4 +55,3 @@ describe("tar round trip", () => {
     expect(() => unpackTar(archive.slice(0, 300))).not.toThrow();
   });
 });
-

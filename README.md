@@ -72,6 +72,8 @@ and anything already deployed are left alone.
     quai env pull             # write them to .env.local
     quai logs -f              # follow recent output
     quai status               # show the limits actually enforced
+    quai list                 # every project on the instance
+    quai open                 # open this project in a browser
     quai rm                   # delete the project and everything it owns
 
 The common case needs no configuration. A folder with an `index.html` deploys as
@@ -180,8 +182,10 @@ never out of step.
 
 ## Development
 
-    bun test                              # 435 unit tests, no container needed
-    bun run typecheck
+    bun run check                         # lint, format, types and unit tests
+    bun test                              # 545 unit tests, no container needed
+    bun run lint
+    bun run format
 
     docker build -t quai:integration .
     bash test/integration.sh quai:integration
@@ -194,6 +198,25 @@ deploy key is allowed to do.
 
 Both run in CI on every push, because an isolation regression is invisible to
 the unit tests alone.
+
+## Operating an instance
+
+A crashed service is restarted on its own, with a widening delay so a project
+that is definitively broken does not burn the machine. After enough failures in
+a row it is given up on and reported, and a redeploy brings it back — an
+incident and a broken project deserve different treatment.
+
+Logs are written to the state volume as well as kept in memory, so output from
+before a restart is still readable. They are bounded, and rotation keeps the
+recent end: the lines explaining a crash are the last ones written.
+
+    quai backup            # write the instance state to a file
+    quai restore <file>    # bring it back on a fresh instance
+
+A backup carries projects, uids, variables and domains. The uids matter most:
+files on the quota volume are owned by number, so a project restored under a
+fresh uid could not read its own deploy. Restoring re-creates the records;
+redeploy each project to bring its content back.
 
 ## Limits worth knowing
 

@@ -104,11 +104,6 @@ export function detectProjectType(files: Set<string>): Detection | null {
   return null;
 }
 
-function requireString(value: unknown, field: string): string {
-  if (typeof value !== "string") throw new Error(`${field} must be a string`);
-  return value;
-}
-
 /**
  * Parses a quai.toml.
  *
@@ -121,8 +116,8 @@ export function parseQuaiToml(source: string): Manifest {
     parsed = Bun.TOML.parse(source);
   } catch (error) {
     throw new Error(
-      "quai.toml is not valid TOML: " +
-        (error instanceof Error ? error.message : String(error)),
+      "quai.toml is not valid TOML: " + (error instanceof Error ? error.message : String(error)),
+      { cause: error },
     );
   }
 
@@ -173,7 +168,7 @@ export function resolveDeploySpec(files: Set<string>, manifestSource: string | n
       "A " +
         type +
         " needs a start command. Add one to quai.toml:\n\n" +
-        "  [service]\n  start = \"node server.js\"",
+        '  [service]\n  start = "node server.js"',
     );
   }
 
@@ -189,4 +184,3 @@ export function resolveDeploySpec(files: Set<string>, manifestSource: string | n
     timeoutSeconds: parseDuration(manifest?.limits?.timeout ?? manifest?.timeout),
   };
 }
-

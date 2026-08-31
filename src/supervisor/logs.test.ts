@@ -46,4 +46,3 @@ describe("capturing project output", () => {
     expect(buffer.read().split("\n").filter(Boolean)).toHaveLength(3);
   });
 });
-

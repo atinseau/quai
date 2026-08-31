@@ -62,7 +62,7 @@ function needsQuoting(value: string): boolean {
  */
 export function formatEnvFile(variables: Record<string, string>): string {
   return Object.keys(variables)
-    .sort()
+    .toSorted()
     .map((key) => {
       const value = variables[key] ?? "";
       const rendered = needsQuoting(value)
@@ -73,4 +73,3 @@ export function formatEnvFile(variables: Record<string, string>): string {
     .map((line) => line + "\n")
     .join("");
 }
-

@@ -22,8 +22,30 @@ permissions:
   packages: write
 
 jobs:
+  verify:
+    name: Tests and isolation guarantees
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.0"
+
+      - run: bun install --frozen-lockfile
+      - run: bun run lint
+      - run: bun run typecheck
+      - run: bun test
+
+      - name: The guarantees must hold before anything is published
+        run: |
+          docker build -t quai:release .
+          bash test/integration.sh quai:release
+
   image:
     name: Container image
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -61,6 +83,7 @@ jobs:
 
   cli:
     name: CLI binaries
+    needs: verify
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
@@ -105,6 +128,7 @@ jobs:
 
   npm:
     name: Types package
+    needs: verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

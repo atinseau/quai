@@ -90,10 +90,7 @@ const SEARCH_PATH = ["/usr/local/bin", "/usr/bin", "/bin"];
  * nsjail execs directly and does not consult PATH, so a command given by name
  * alone fails with ENOENT no matter how the environment is set.
  */
-export function resolveExecutable(
-  name: string,
-  exists: (path: string) => boolean,
-): string {
+export function resolveExecutable(name: string, exists: (path: string) => boolean): string {
   if (name.includes("/")) return name;
 
   for (const directory of SEARCH_PATH) {
@@ -124,10 +121,7 @@ export function buildJailArgs(options: JailOptions): string[] {
     ...(options.cwd ? ["--cwd", options.cwd] : []),
     // nsjail hands the child an empty environment unless each variable is
     // passed explicitly, so HOME and PORT would arrive undefined.
-    ...Object.entries(options.env ?? {}).flatMap(([key, value]) => [
-      "--env",
-      key + "=" + value,
-    ]),
+    ...Object.entries(options.env ?? {}).flatMap(([key, value]) => ["--env", key + "=" + value]),
     "--disable_clone_newnet",
     "--disable_clone_newuser",
     "--disable_clone_newns",
@@ -140,4 +134,3 @@ export function buildJailArgs(options: JailOptions): string[] {
     ...options.command,
   ];
 }
-

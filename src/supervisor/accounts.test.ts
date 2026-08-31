@@ -25,4 +25,3 @@ describe("where project homes live", () => {
     expect(homeFor("api")).toBe(homeFor("api"));
   });
 });
-

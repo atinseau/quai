@@ -83,7 +83,7 @@ describe("capabilities", () => {
   });
 
   test("decodes NET_ADMIN and SYS_ADMIN once they are added", () => {
-    expect(decodeCapabilities(WITH_CAP_ADD).sort()).toEqual(["NET_ADMIN", "SYS_ADMIN"]);
+    expect(decodeCapabilities(WITH_CAP_ADD).toSorted()).toEqual(["NET_ADMIN", "SYS_ADMIN"]);
   });
 
   test("NET_ADMIN alone is decoded without implying SYS_ADMIN", () => {
@@ -102,4 +102,3 @@ describe("capabilities", () => {
     expect(decodeCapabilities("")).toEqual([]);
   });
 });
-

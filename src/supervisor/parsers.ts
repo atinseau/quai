@@ -82,4 +82,3 @@ export function decodeCapabilities(hexMask: string): string[] {
     .filter(([, bit]) => (mask & bit) !== 0n)
     .map(([name]) => name);
 }
-

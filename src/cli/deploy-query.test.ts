@@ -55,4 +55,3 @@ describe("what the client tells the server", () => {
     expect(deployQuery({ type: "static" }).has("prod")).toBe(false);
   });
 });
-

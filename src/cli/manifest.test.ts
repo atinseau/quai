@@ -168,7 +168,6 @@ describe("resolving what to deploy", () => {
   });
 });
 
-
 describe("a lone handler file", () => {
   test("api.js alone is a Node function", () => {
     // The spec's second story: deploy a single file with no configuration.
@@ -200,4 +199,3 @@ describe("a lone handler file", () => {
     expect(detectProjectType(new Set(["api.js", "index.html"]))?.type).toBe("static");
   });
 });
-

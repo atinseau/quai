@@ -102,7 +102,6 @@ describe("cgroup writes", () => {
   });
 });
 
-
 describe("cgroup path stability", () => {
   test("the project cgroup is a sibling of the supervisor leaf, not a child", () => {
     // Nesting under the leaf would put projects inside the cgroup holding the
@@ -131,4 +130,3 @@ describe("cgroup path stability", () => {
     expect(alpha.containerCgroup).toBe(beta.containerCgroup);
   });
 });
-

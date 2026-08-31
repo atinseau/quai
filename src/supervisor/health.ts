@@ -48,4 +48,3 @@ export function buildHealthReport(inputs: HealthInputs): HealthReport {
     runtimes: inputs.runtimes,
   };
 }
-

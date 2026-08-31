@@ -83,4 +83,3 @@ describe("router", () => {
     expect(response.headers.get("content-type")).toContain("text/css");
   });
 });
-

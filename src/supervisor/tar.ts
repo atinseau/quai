@@ -96,4 +96,3 @@ export function unpackTar(archive: Uint8Array): TarEntry[] {
 
   return entries;
 }
-

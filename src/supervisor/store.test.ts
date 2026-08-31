@@ -125,4 +125,3 @@ describe("environment variables", () => {
     expect(store.getEnv("alpha")).toEqual({});
   });
 });
-

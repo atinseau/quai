@@ -16,10 +16,7 @@ import { chmod, rename, rm, stat } from "node:fs/promises";
  * @throws leaving the working binary untouched: half-updating the tool that
  * performs updates would leave no way out but a manual reinstall.
  */
-export async function replaceRunningBinary(
-  current: string,
-  staged: string,
-): Promise<string> {
+export async function replaceRunningBinary(current: string, staged: string): Promise<string> {
   // Fail before touching anything if the download is not actually there.
   await stat(staged);
 
@@ -52,4 +49,3 @@ export type UninstallPlan = { binary: string; config: string };
 export function uninstallPlan(binary: string, config: string): UninstallPlan {
   return { binary, config };
 }
-

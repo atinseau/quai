@@ -116,4 +116,3 @@ export class PersistentLog {
     await rm(this.path, { force: true });
   }
 }
-

@@ -74,8 +74,6 @@ export async function deployArchive(
 
   const uid = deps.store.allocateUid(project);
 
-
-
   if (spec.type === "static") {
     // A static project never starts a process: the router serves it straight
     // from disk, so it costs nothing when idle.
@@ -153,7 +151,7 @@ export async function deployArchive(
       home,
       command: host ? host.command : spec.start!.split(" "),
       internalPort,
-      env: { ...deps.store.getEnv(project), ...(host?.env ?? {}) },
+      env: { ...deps.store.getEnv(project), ...host?.env },
       namespaceIndex: deps.store.lookup(project)?.netnsIndex ?? 0,
       limits: {
         memory: spec.limits?.memory ?? DEFAULT_LIMITS.memory,
@@ -171,4 +169,3 @@ export async function deployArchive(
     type: spec.type,
   };
 }
-

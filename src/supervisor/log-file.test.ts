@@ -92,7 +92,6 @@ describe("logs that outlive the supervisor", () => {
   });
 });
 
-
 describe("a quiet project still reaches disk", () => {
   test("a single line is written without waiting for a full batch", async () => {
     // Batching alone meant a service logging once at startup never reached the
@@ -114,4 +113,3 @@ describe("a quiet project still reaches disk", () => {
     expect(await readFile(join(directory, "quiet.log"), "utf8")).toContain("now");
   });
 });
-

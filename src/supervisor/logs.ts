@@ -31,4 +31,3 @@ export class LogBuffer {
     return this.lines.length === 0 ? "" : this.lines.join("\n") + "\n";
   }
 }
-

@@ -52,4 +52,3 @@ export function releaseAssetUrl(repository: string, tag: string, asset: string):
 export function installerUrlForTag(repository: string, tag: string): string {
   return `${DOWNLOAD_BASE}/${repository}/releases/download/${tag}/install.sh`;
 }
-

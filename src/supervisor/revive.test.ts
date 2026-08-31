@@ -100,7 +100,10 @@ describe("bringing a crashed service back", () => {
     for (let attempt = 0; attempt < 40; attempt++) {
       runner.crash("api");
       clock += 30_000;
-      await supervisor.reviveCrashed(() => clock, (project) => abandoned.push(project));
+      await supervisor.reviveCrashed(
+        () => clock,
+        (project) => abandoned.push(project),
+      );
     }
 
     expect(abandoned).toContain("api");
@@ -140,4 +143,3 @@ describe("bringing a crashed service back", () => {
     expect(runner.starts.length).toBe(before + 1);
   });
 });
-

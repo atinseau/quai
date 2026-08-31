@@ -119,7 +119,7 @@ describe("isolation preflight", () => {
       projectQuotasEnabled: false,
       capabilities: [],
     });
-    expect(result.failures.map((f) => f.requirement).sort()).toEqual([
+    expect(result.failures.map((f) => f.requirement).toSorted()).toEqual([
       "capabilities",
       "cgroup-controllers",
       "cgroup-delegation",
@@ -137,4 +137,3 @@ describe("isolation preflight", () => {
     }
   });
 });
-

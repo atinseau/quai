@@ -1,16 +1,11 @@
 import { describe, expect, test, beforeEach } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 import { Store } from "./store";
 import { captureBackup, describeBackup, restoreBackup } from "./backup";
 
 let store: Store;
-let directory: string;
 
-beforeEach(async () => {
-  directory = await mkdtemp(join(tmpdir(), "quai-backup-"));
+beforeEach(() => {
   store = new Store(new Database(":memory:"));
 });
 
@@ -20,7 +15,7 @@ describe("capturing an instance", () => {
     store.upsertProject({ name: "beta", type: "service" });
 
     const backup = await captureBackup(store);
-    expect(backup.projects.map((p) => p.name).sort()).toEqual(["alpha", "beta"]);
+    expect(backup.projects.map((p) => p.name).toSorted()).toEqual(["alpha", "beta"]);
   });
 
   test("uids are captured, since files on the volume are owned by them", async () => {
@@ -135,7 +130,16 @@ describe("restoring an instance", () => {
     const backup = {
       version: 1,
       takenAt: 1,
-      projects: [{ name: "alpha", type: "static", uid: 10000, internalPort: null, command: null, netnsIndex: 0 }],
+      projects: [
+        {
+          name: "alpha",
+          type: "static",
+          uid: 10000,
+          internalPort: null,
+          command: null,
+          netnsIndex: 0,
+        },
+      ],
       env: { alpha: { KEY: 42 as never } },
       domains: {},
     };
@@ -145,4 +149,3 @@ describe("restoring an instance", () => {
     expect(fresh.list()).toEqual([]);
   });
 });
-

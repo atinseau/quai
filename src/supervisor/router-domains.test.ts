@@ -82,4 +82,3 @@ describe("custom domains", () => {
     expect((await get(ZONE, ctx, "/health")).status).toBe(200);
   });
 });
-

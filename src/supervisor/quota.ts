@@ -53,7 +53,13 @@ export class ProjectQuota {
 
     return [
       // -s marks the directory tree as belonging to this project id.
-      ["xfs_quota", "-x", "-c", `project -s -p ${this.directory} ${this.projectId}`, this.mountPoint],
+      [
+        "xfs_quota",
+        "-x",
+        "-c",
+        `project -s -p ${this.directory} ${this.projectId}`,
+        this.mountPoint,
+      ],
       ["xfs_quota", "-x", "-c", `limit -p bhard=${bytes} ${this.projectId}`, this.mountPoint],
     ];
   }
@@ -70,9 +76,7 @@ export class ProjectQuota {
    * and the accounting slowly fills with dead entries.
    */
   releaseCommands(): string[][] {
-    return [
-      ["xfs_quota", "-x", "-c", `limit -p bhard=0 ${this.projectId}`, this.mountPoint],
-    ];
+    return [["xfs_quota", "-x", "-c", `limit -p bhard=0 ${this.projectId}`, this.mountPoint]];
   }
 }
 
@@ -91,4 +95,3 @@ export function parseQuotaReport(line: string): QuotaReport | null {
     limitBytes: Number(match[4]) * REPORT_UNIT,
   };
 }
-

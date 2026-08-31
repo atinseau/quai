@@ -66,4 +66,3 @@ describe("collecting a directory", () => {
     expect(isSkipped("index.html")).toBe(false);
   });
 });
-

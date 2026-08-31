@@ -46,7 +46,6 @@ describe("forced command parsing", () => {
   });
 });
 
-
 describe("deploy parameters", () => {
   test("a query string is carried alongside the project name", () => {
     expect(parseForcedCommand("quai-deploy api type=service&start=node+app.js")).toEqual({
@@ -71,7 +70,6 @@ describe("deploy parameters", () => {
     expect(() => parseForcedCommand("quai-deploy ../etc type=static")).toThrow(/invalid/i);
   });
 });
-
 
 describe("administrative commands", () => {
   const { parseAdminCommand } = require("./parse-command");
@@ -106,4 +104,3 @@ describe("administrative commands", () => {
     expect(() => parseAdminCommand("quai-admin remove site;rm -rf /")).toThrow(/invalid/i);
   });
 });
-

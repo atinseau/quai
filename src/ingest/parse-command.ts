@@ -73,4 +73,3 @@ export function parseForcedCommand(requested: string): DeployRequest {
   // by the supervisor, never executed here.
   return { project, query: parts[2] ?? "" };
 }
-

@@ -92,4 +92,3 @@ describe("deciding whether to restart", () => {
     expect(decideRestart(history({ failures: 0 }), 0).action).toBe("restart");
   });
 });
-

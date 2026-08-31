@@ -85,4 +85,3 @@ export function renderQuaiToml(options: InitOptions): string {
 
   return lines.join("\n");
 }
-

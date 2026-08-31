@@ -53,7 +53,6 @@ describe("typing a manifest", () => {
   });
 });
 
-
 describe("the package stands alone", () => {
   test("no Node types are required to use it", async () => {
     // Importing node:http would force @types/node on every user, including
@@ -79,4 +78,3 @@ describe("the package stands alone", () => {
     expect(typeof handler).toBe("function");
   });
 });
-

@@ -17,19 +17,14 @@ const DURATION = /^\d+\s*(s|m)?$/;
 const PROJECT_NAME = /^[a-z0-9][a-z0-9-]*$/;
 
 const size = (field: string) =>
-  z
-    .string()
-    .regex(SIZE, `${field} must be a size such as "256Mi" or "1Gi"`);
+  z.string().regex(SIZE, `${field} must be a size such as "256Mi" or "1Gi"`);
 
 export const manifestSchema = z
   .object({
     name: z
       .string()
       .max(63, "name is too long for a hostname label (63 characters)")
-      .regex(
-        PROJECT_NAME,
-        'name must be lowercase letters, digits and hyphens, e.g. "my-site"',
-      )
+      .regex(PROJECT_NAME, 'name must be lowercase letters, digits and hyphens, e.g. "my-site"')
       .optional(),
 
     type: z.enum(["static", "service", "function"], {
@@ -130,4 +125,3 @@ export function formatManifestErrors(error: z.ZodError): string {
   lines.push("", "See https://github.com/atinseau/quai#quaitoml for the full format.");
   return lines.join("\n");
 }
-

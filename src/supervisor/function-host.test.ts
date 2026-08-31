@@ -17,9 +17,7 @@ describe("hosting a function", () => {
   test("the handler path is passed to the host", () => {
     // Through the environment rather than argv, so a handler name can never be
     // read as a flag by the interpreter.
-    expect(functionHostFor("node", "handlers/api.js", 30).env.QUAI_HANDLER).toBe(
-      "handlers/api.js",
-    );
+    expect(functionHostFor("node", "handlers/api.js", 30).env.QUAI_HANDLER).toBe("handlers/api.js");
   });
 
   test("a handler named like a flag cannot reach the interpreter as one", () => {
@@ -45,4 +43,3 @@ describe("hosting a function", () => {
     }
   });
 });
-

@@ -190,19 +190,13 @@ export class LinuxRunner implements Runner {
    * start.
    */
   private async applyEgressPolicy(namespace: NetworkNamespace): Promise<void> {
-    const policy = new EgressPolicy(
-      namespace.name,
-      namespace.subnet,
-      "qh-" + namespace.project,
-    );
+    const policy = new EgressPolicy(namespace.name, namespace.subnet, "qh-" + namespace.project);
 
     for (const rule of policy.rules()) {
       const result = await run(rule);
       if (!result.ok) {
         await run(namespace.destroyCommands()[0]!);
-        throw new Error(
-          "Could not fence project '" + namespace.project + "': " + result.stderr,
-        );
+        throw new Error("Could not fence project '" + namespace.project + "': " + result.stderr);
       }
     }
   }
@@ -239,8 +233,12 @@ export class LinuxRunner implements Runner {
         await rmdir(cgroup.path).catch(() => {});
         if (namespace) await run(namespace.destroyCommands()[0]!);
         throw new Error(
-          "Could not place project '" + spec.project + "' under its resource " +
-            "limits: " + (error instanceof Error ? error.message : String(error)),
+          "Could not place project '" +
+            spec.project +
+            "' under its resource " +
+            "limits: " +
+            (error instanceof Error ? error.message : String(error)),
+          { cause: error },
         );
       }
     }
@@ -309,11 +307,7 @@ export class LinuxRunner implements Runner {
    * Reading continuously matters: an unread pipe fills and blocks the project
    * once it has written enough.
    */
-  private captureOutput(
-    child: Bun.Subprocess,
-    logs: LogBuffer,
-    file: PersistentLog | null,
-  ): void {
+  private captureOutput(child: Bun.Subprocess, logs: LogBuffer, file: PersistentLog | null): void {
     for (const stream of [child.stdout, child.stderr]) {
       if (!(stream instanceof ReadableStream)) continue;
 
@@ -354,4 +348,3 @@ export class LinuxRunner implements Runner {
 }
 
 export type { Limits };
-

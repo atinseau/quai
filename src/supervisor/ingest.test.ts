@@ -162,7 +162,6 @@ describe("deploying a service", () => {
   });
 });
 
-
 describe("disk quota on deploy", () => {
   test("a quota is applied to every project", async () => {
     const applied: { project: string; limit: string }[] = [];
@@ -219,7 +218,6 @@ describe("disk quota on deploy", () => {
   });
 });
 
-
 describe("deploying a function", () => {
   const fn = { type: "function" as const, start: "api.js", runtime: "node" as const };
 
@@ -251,11 +249,16 @@ describe("deploying a function", () => {
   });
 
   test("each runtime gets its own host", async () => {
-    await deployArchive("py", packTar([entry("main.py", "#")]), {
-      type: "function",
-      start: "main.py",
-      runtime: "python",
-    }, deps);
+    await deployArchive(
+      "py",
+      packTar([entry("main.py", "#")]),
+      {
+        type: "function",
+        start: "main.py",
+        runtime: "python",
+      },
+      deps,
+    );
     expect(runner.started[0]!.command.join(" ")).toContain("python_host");
   });
 
@@ -275,7 +278,6 @@ describe("deploying a function", () => {
   });
 });
 
-
 describe("functions survive a restart", () => {
   const fn = { type: "function" as const, start: "api.js", runtime: "node" as const };
 
@@ -288,7 +290,12 @@ describe("functions survive a restart", () => {
   });
 
   test("the timeout is persisted too", async () => {
-    await deployArchive("fn", packTar([entry("api.js", "//")]), { ...fn, timeoutSeconds: 45 }, deps);
+    await deployArchive(
+      "fn",
+      packTar([entry("api.js", "//")]),
+      { ...fn, timeoutSeconds: 45 },
+      deps,
+    );
     expect(deps.store.getEnv("fn").QUAI_TIMEOUT_MS).toBe("45000");
   });
 
@@ -308,7 +315,6 @@ describe("functions survive a restart", () => {
   });
 });
 
-
 describe("storage hygiene", () => {
   test("a service leaves no empty site directory behind", async () => {
     // Its content lives in the project's home, not under sites/. An empty
@@ -318,7 +324,12 @@ describe("storage hygiene", () => {
       "api",
       packTar([entry("server.js", "//")]),
       { type: "service", start: "node server.js" },
-      { ...deps, applyQuota: async (project) => { applied.push(project); } },
+      {
+        ...deps,
+        applyQuota: async (project) => {
+          applied.push(project);
+        },
+      },
     );
     const { readdir } = await import("node:fs/promises");
     const sites = await readdir(join(base, "sites")).catch(() => []);
@@ -331,7 +342,6 @@ describe("storage hygiene", () => {
     expect(await readdir(join(base, "sites"))).toContain("site");
   });
 });
-
 
 describe("a redeploy cannot be redirected by the project", () => {
   const service = { type: "service" as const, start: "node server.js" };
@@ -354,7 +364,7 @@ describe("a redeploy cannot be redirected by the project", () => {
   });
 
   test("a symlink left by a previous deploy is not followed", async () => {
-    const { mkdir, symlink, readFile, writeFile } = await import("node:fs/promises");
+    const { mkdir, symlink, readFile: read, writeFile } = await import("node:fs/promises");
     const outside = join(base, "outside.txt");
     await writeFile(outside, "untouched");
 
@@ -365,23 +375,27 @@ describe("a redeploy cannot be redirected by the project", () => {
     await deployArchive("api", packTar([entry("server.js", "// new code")]), service, deps);
 
     // The file the symlink pointed at must be exactly as it was.
-    expect(await readFile(outside, "utf8")).toBe("untouched");
+    expect(await read(outside, "utf8")).toBe("untouched");
   });
 
   test("the new deploy is what actually lands in the home", async () => {
-    const { readFile } = await import("node:fs/promises");
+    const { readFile: read } = await import("node:fs/promises");
     await deployArchive("api", packTar([entry("server.js", "// new code")]), service, deps);
-    expect(await readFile(join(base, "homes", "api", "server.js"), "utf8")).toBe("// new code");
+    expect(await read(join(base, "homes", "api", "server.js"), "utf8")).toBe("// new code");
   });
 
   test("a file the project no longer ships disappears", async () => {
     const { readdir } = await import("node:fs/promises");
-    await deployArchive("api", packTar([entry("server.js", "//"), entry("old.js", "//")]), service, deps);
+    await deployArchive(
+      "api",
+      packTar([entry("server.js", "//"), entry("old.js", "//")]),
+      service,
+      deps,
+    );
     await deployArchive("api", packTar([entry("server.js", "//")]), service, deps);
     expect(await readdir(join(base, "homes", "api"))).toEqual(["server.js"]);
   });
 });
-
 
 describe("declared limits reach the process", () => {
   const service = { type: "service" as const, start: "node server.js" };
@@ -389,18 +403,28 @@ describe("declared limits reach the process", () => {
   test("a declared memory limit is applied, not the default", async () => {
     // Without this the quai.toml is decorative: a project asking for 512Mi
     // silently runs on the default.
-    await deployArchive("api", packTar([entry("server.js", "//")]), {
-      ...service,
-      limits: { memory: "512Mi" },
-    }, deps);
+    await deployArchive(
+      "api",
+      packTar([entry("server.js", "//")]),
+      {
+        ...service,
+        limits: { memory: "512Mi" },
+      },
+      deps,
+    );
     expect(runner.started[0]!.limits?.memory).toBe("512Mi");
   });
 
   test("declared cpu and pids limits are applied", async () => {
-    await deployArchive("api", packTar([entry("server.js", "//")]), {
-      ...service,
-      limits: { cpu: "2", pids: 128 },
-    }, deps);
+    await deployArchive(
+      "api",
+      packTar([entry("server.js", "//")]),
+      {
+        ...service,
+        limits: { cpu: "2", pids: 128 },
+      },
+      deps,
+    );
     expect(runner.started[0]!.limits).toMatchObject({ cpu: "2", pids: 128 });
   });
 
@@ -411,10 +435,20 @@ describe("declared limits reach the process", () => {
 
   test("a declared disk quota is applied", async () => {
     let seen = "";
-    await deployArchive("api", packTar([entry("server.js", "//")]), {
-      ...service,
-      diskQuota: "5Gi",
-    }, { ...deps, applyQuota: async (_p, _u, limit) => { seen = limit; } });
+    await deployArchive(
+      "api",
+      packTar([entry("server.js", "//")]),
+      {
+        ...service,
+        diskQuota: "5Gi",
+      },
+      {
+        ...deps,
+        applyQuota: async (_p, _u, limit) => {
+          seen = limit;
+        },
+      },
+    );
     expect(seen).toBe("5Gi");
   });
 
@@ -422,12 +456,13 @@ describe("declared limits reach the process", () => {
     let seen = "";
     await deployArchive("api", packTar([entry("server.js", "//")]), service, {
       ...deps,
-      applyQuota: async (_p, _u, limit) => { seen = limit; },
+      applyQuota: async (_p, _u, limit) => {
+        seen = limit;
+      },
     });
     expect(seen).toBe("1Gi");
   });
 });
-
 
 describe("a redeploy keeps the home closed", () => {
   const service = { type: "service" as const, start: "node server.js" };
@@ -460,4 +495,3 @@ describe("a redeploy keeps the home closed", () => {
     expect(mode).toBe(0o750);
   });
 });
-

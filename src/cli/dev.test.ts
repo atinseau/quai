@@ -78,9 +78,9 @@ describe("running a project locally", () => {
   });
 
   test("a service without a start command is refused", () => {
-    expect(() =>
-      localRunPlan({ type: "service" }, { root: "/work/app", port: 3000 }),
-    ).toThrow(/start/i);
+    expect(() => localRunPlan({ type: "service" }, { root: "/work/app", port: 3000 })).toThrow(
+      /start/i,
+    );
   });
 
   test("the working directory is the project root", () => {
@@ -91,4 +91,3 @@ describe("running a project locally", () => {
     expect(plan.cwd).toBe("/work/app");
   });
 });
-

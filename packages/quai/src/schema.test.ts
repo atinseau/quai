@@ -7,7 +7,7 @@ describe("the editor schema matches the manifest Quai accepts", () => {
   test("every top-level key of the format is described", () => {
     // A key missing here shows as an error in the editor even though Quai
     // accepts it, which is worse than no schema at all.
-    expect(Object.keys(properties).sort()).toEqual([
+    expect(Object.keys(properties).toSorted()).toEqual([
       "build",
       "domains",
       "env",
@@ -20,19 +20,11 @@ describe("the editor schema matches the manifest Quai accepts", () => {
   });
 
   test("the project types are the three Quai supports", () => {
-    expect((properties.type as { enum: string[] }).enum).toEqual([
-      "static",
-      "service",
-      "function",
-    ]);
+    expect((properties.type as { enum: string[] }).enum).toEqual(["static", "service", "function"]);
   });
 
   test("the runtimes are the three that have hosts", () => {
-    expect((properties.runtime as { enum: string[] }).enum).toEqual([
-      "node",
-      "bun",
-      "python",
-    ]);
+    expect((properties.runtime as { enum: string[] }).enum).toEqual(["node", "bun", "python"]);
   });
 
   test("only type is required, so a minimal manifest validates", () => {
@@ -45,12 +37,12 @@ describe("the editor schema matches the manifest Quai accepts", () => {
 
   test("the limits mirror what the supervisor enforces", () => {
     const limits = (properties.limits as { properties: Record<string, unknown> }).properties;
-    expect(Object.keys(limits).sort()).toEqual(["cpu", "disk", "memory", "pids", "timeout"]);
+    expect(Object.keys(limits).toSorted()).toEqual(["cpu", "disk", "memory", "pids", "timeout"]);
   });
 
   test("a size pattern accepts the forms the parser accepts", () => {
     const pattern = new RegExp(
-      ((properties.limits as { properties: { memory: { pattern: string } } }).properties.memory)
+      (properties.limits as { properties: { memory: { pattern: string } } }).properties.memory
         .pattern,
     );
     for (const value of ["256Mi", "1Gi", "512", "2G"]) {
@@ -65,4 +57,3 @@ describe("the editor schema matches the manifest Quai accepts", () => {
     expect(pattern.test("My_Site")).toBe(false);
   });
 });
-

@@ -109,4 +109,3 @@ describe("routing a service project", () => {
     expect(seenPath).toBe("/users/42");
   });
 });
-

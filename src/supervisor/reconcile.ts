@@ -85,4 +85,3 @@ export function formatReport(report: ReconcileReport): string {
   }
   return lines.join("\n");
 }
-
