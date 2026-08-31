@@ -47,7 +47,7 @@ if [ -n "${QUAI_VERSION:-}" ]; then
 else
   # Resolve the newest tag without needing jq on the user's machine.
   VERSION="$(curl -fsSL "${API}/repos/${REPO}/releases/latest" \
-    | sed -n 's/.*"tag_name" *: *"\([^"]*\)".*/\\1/p' | head -1)"
+    | sed -n 's/.*"tag_name" *: *"\([^"]*\)".*/\1/p' | head -1)"
   [ -n "$VERSION" ] || die "could not find a published release. Set QUAI_VERSION to install a specific tag."
 fi
 
