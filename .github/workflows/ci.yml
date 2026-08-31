@@ -1,0 +1,62 @@
+# Checks that run on every push and pull request.
+#
+# The unit tests answer "are the decisions right"; the integration suite answers
+# "are the guarantees real". Only the second can catch an isolation regression,
+# because isolation is enforced by the kernel — so it runs here too, on a real
+# container with a real XFS volume, not just on a developer's machine.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  unit:
+    name: Unit tests and types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.0"
+
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun test
+
+  integration:
+    name: Isolation guarantees
+    runs-on: ubuntu-latest
+    # Slower than the unit tests but the only thing that proves the product
+    # actually isolates anything.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image
+        run: docker build -t quai:ci .
+
+      - name: Run the integration suite
+        # The XFS volume is built inside the privileged container, which ships
+        # xfsprogs, so the runner itself needs nothing beyond Docker.
+        run: bash test/integration.sh quai:ci
+
+      - name: Show the container log on failure
+        if: failure()
+        run: docker logs quai-integration 2>&1 | tail -40 || true
+
+  shellcheck:
+    name: Shell scripts
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lint the scripts that run on a real host
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          shellcheck --severity=warning \
+            deploy/entrypoint.sh deploy/forced-command.sh test/integration.sh
+

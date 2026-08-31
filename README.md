@@ -32,6 +32,14 @@ The supervisor refuses to start when the host cannot enforce isolation, and says
 exactly what to change. That is deliberate — offering isolation it cannot apply
 would be worse than failing.
 
+## Installing the CLI
+
+    curl -fsSL https://raw.githubusercontent.com/atinseau/quai/main/install.sh | sh
+
+The binary is standalone, so nothing else has to be installed first. It is
+verified against the published checksums before it lands on your PATH. Set
+`QUAI_VERSION` for a specific tag or `QUAI_INSTALL` for another directory.
+
 ## Using it
 
     quai login root@your-host quai.your-domain
@@ -97,9 +105,18 @@ NODE_ENV = "production"
 Projects reach the public internet but not each other, not the operator's
 private network, and not cloud metadata endpoints.
 
+## Releases
+
+Tagging `v*` publishes a multi-architecture image to
+`ghcr.io/atinseau/quai` and standalone CLI binaries for Linux and macOS, all
+from the same build — so the `quai` on a laptop and the image on the server are
+never out of step.
+
+    git tag v0.1.0 && git push origin v0.1.0
+
 ## Development
 
-    bun test                              # 434 unit tests, no container needed
+    bun test                              # 435 unit tests, no container needed
     bun run typecheck
 
     docker build -t quai:integration .
@@ -110,6 +127,9 @@ isolation Quai promises is enforced by the kernel, so it is proven against a rea
 container on a real XFS volume — 28 checks covering file, network, memory, PID,
 disk and syscall isolation, survival across a container recreation, and what a
 deploy key is allowed to do.
+
+Both run in CI on every push, because an isolation regression is invisible to
+the unit tests alone.
 
 ## Limits worth knowing
 

@@ -1,0 +1,125 @@
+# Publishes a release: the container image an operator deploys, and the CLI
+# binaries a developer installs.
+#
+# Both come from the same tag, so "quai" on a laptop and the image on the server
+# are always the same build. The image is what deploy/compose.yaml points at, so
+# without this workflow those instructions refer to something that does not
+# exist.
+
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release, e.g. v0.1.0"
+        required: true
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  image:
+    name: Container image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=latest
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          # A host is x86 or ARM; publishing both means the same tag works
+          # wherever the operator runs it.
+          platforms: linux/amd64,linux/arm64
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  cli:
+    name: CLI binaries
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-x64
+          - os: ubuntu-24.04-arm
+            target: linux-arm64
+          - os: macos-latest
+            target: darwin-arm64
+          - os: macos-13
+            target: darwin-x64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.4.0"
+
+      - run: bun install --frozen-lockfile
+
+      - name: Compile a standalone binary
+        # Compiled rather than shipped as source: the developer installing the
+        # CLI should not have to install a runtime first.
+        run: |
+          bun build --compile --minify \
+            --outfile "quai-${{ matrix.target }}" \
+            src/cli/main.ts
+
+      - name: Check it runs
+        run: "./quai-${{ matrix.target }} --help"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: "quai-${{ matrix.target }}"
+          path: "quai-${{ matrix.target }}"
+
+  publish:
+    name: Publish the release
+    needs: [image, cli]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Checksums
+        run: |
+          cd artifacts
+          sha256sum quai-* > checksums.txt
+          cat checksums.txt
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            artifacts/quai-*
+            artifacts/checksums.txt
+
