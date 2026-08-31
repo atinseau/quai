@@ -25,6 +25,23 @@ last ones written, not the first.
 
 A project's logs are removed when the project is.
 
+## Upgrading Quai
+
+Pull the new image and restart. The database is brought forward automatically,
+and the schema changes being applied are named in the log:
+
+    applying schema migration 3: custom domains
+
+Each change runs once and only on a database that is missing it, so restarting
+an already-current instance does nothing. A database written by a *newer* Quai
+is refused rather than rewritten, so downgrading fails loudly instead of
+corrupting state.
+
+Take a backup first anyway. A migration is the one moment where a bug costs
+more than a restart:
+
+    quai backup before-upgrade.json
+
 ## Backups
 
     quai backup                  # writes quai-backup.json

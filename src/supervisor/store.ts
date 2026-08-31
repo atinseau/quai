@@ -9,6 +9,7 @@
  */
 
 import { Database } from "bun:sqlite";
+import { migrate } from "./migrate";
 import type { ProjectRecord } from "./router";
 
 /** Project uids start well above the system range to avoid collisions. */
@@ -47,36 +48,11 @@ export class Store {
   constructor(readonly database: Database) {
     this.database.exec("PRAGMA journal_mode = WAL");
     this.database.exec("PRAGMA foreign_keys = ON");
-    this.database.exec(`
-      CREATE TABLE IF NOT EXISTS projects (
-        name          TEXT PRIMARY KEY,
-        type          TEXT NOT NULL,
-        uid           INTEGER UNIQUE,
-        internal_port INTEGER,
-        command       TEXT,
-        netns_index   INTEGER,
-        created_at    INTEGER NOT NULL DEFAULT (unixepoch())
-      );
+    // The schema is brought forward by migrations rather than by CREATE TABLE
+    // IF NOT EXISTS, which does nothing at all to a database that already
+    // exists and would leave an upgraded instance missing its new columns.
+    migrate(this.database);
 
-      -- Uids are never reused, even after a project is deleted, so a new
-      -- project cannot inherit files a previous owner left behind.
-      CREATE TABLE IF NOT EXISTS uid_watermark (
-        id   INTEGER PRIMARY KEY CHECK (id = 1),
-        next INTEGER NOT NULL
-      );
-
-      CREATE TABLE IF NOT EXISTS env (
-        project TEXT NOT NULL REFERENCES projects(name) ON DELETE CASCADE,
-        key     TEXT NOT NULL,
-        value   TEXT NOT NULL,
-        PRIMARY KEY (project, key)
-      );
-
-      CREATE TABLE IF NOT EXISTS domains (
-        domain  TEXT PRIMARY KEY,
-        project TEXT NOT NULL REFERENCES projects(name) ON DELETE CASCADE
-      );
-    `);
     this.database.run("INSERT OR IGNORE INTO uid_watermark (id, next) VALUES (1, ?)", [FIRST_UID]);
   }
 
@@ -149,7 +125,13 @@ export class Store {
   }
 
   removeProject(name: string): void {
-    this.database.run("DELETE FROM projects WHERE name = ?", [name]);
+    // Removed explicitly rather than by cascade: SQLite cannot add a foreign
+    // key to a table that already exists, so a migrated database has none.
+    this.transaction(() => {
+      this.database.run("DELETE FROM env WHERE project = ?", [name]);
+      this.database.run("DELETE FROM domains WHERE project = ?", [name]);
+      this.database.run("DELETE FROM projects WHERE name = ?", [name]);
+    });
   }
 
   /**

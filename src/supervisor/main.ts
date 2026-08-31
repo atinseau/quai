@@ -19,6 +19,7 @@ import { handleRequest } from "./router";
 import { ProjectSupervisor } from "./runner";
 import { SiteStore } from "./sites";
 import { openStore } from "./store";
+import { pendingSchemaChanges } from "./migrate";
 import { captureBackup, restoreBackup, type Backup } from "./backup";
 import { ProjectQuota, parseQuotaReport } from "./quota";
 import { containerCgroupPath } from "./cgroup-path";
@@ -48,7 +49,13 @@ await mkdir(dirname(SECCOMP_POLICY_PATH), { recursive: true });
 await writeFile(SECCOMP_POLICY_PATH, new SeccompProfile().policy());
 
 const sites = new SiteStore(sitesDirectory);
-const store = openStore(join(STATE, "quai.db"));
+// Report an upgrade before it happens: a schema change is the one moment an
+// operator wants a line in the log rather than silence.
+const databasePath = join(STATE, "quai.db");
+const pending = await pendingSchemaChanges(databasePath);
+for (const change of pending) console.log("applying schema migration " + change);
+
+const store = openStore(databasePath);
 const runner = new LinuxRunner();
 const projects = new ProjectSupervisor(runner);
 
