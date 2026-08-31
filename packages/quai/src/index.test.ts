@@ -61,9 +61,7 @@ describe("the package stands alone", () => {
     // Read from the source rather than the build output: dist/ is generated
     // and absent from a fresh checkout, so asserting against it passed locally
     // and failed in CI.
-    const source = await Bun.file(
-      new URL("./index.ts", import.meta.url).pathname,
-    ).text();
+    const source = await Bun.file(new URL("./index.ts", import.meta.url).pathname).text();
 
     // The comment explaining why may name them; an import must not.
     const imports = source
