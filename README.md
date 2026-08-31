@@ -108,6 +108,21 @@ Editors that understand JSON Schema can complete and check `quai.toml` from
 [schema/quai.schema.json](schema/quai.schema.json); `quai init` writes the
 pointer into the file it generates.
 
+The manifest is also validated when you deploy, and every problem is reported
+at once rather than one per attempt:
+
+```
+quai: quai.toml is not valid:
+
+  name: name must be lowercase letters, digits and hyphens, e.g. "my-site"
+  runtime: runtime must be one of: "node", "bun", "python"
+  limits.cpu: cpu must be a number of cores, e.g. "0.5" or "2"
+  limits.memroy is not a setting Quai knows about
+```
+
+An unknown key is named rather than ignored: a typo that silently does nothing
+is the hardest kind of mistake to find.
+
 ## quai.toml
 
 Optional. Only the parts you need:

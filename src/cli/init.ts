@@ -22,6 +22,24 @@ function quote(value: string): string {
   return '"' + value.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"';
 }
 
+/**
+ * Reduces a directory name to something usable as a project name.
+ *
+ * The generator must not emit a manifest its own parser refuses: a quote or an
+ * uppercase letter in a folder name would otherwise produce a file that fails
+ * on the next deploy.
+ */
+function safeName(name: string): string {
+  const cleaned = name
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 63)
+    .replace(/-+$/g, "");
+
+  return cleaned.length > 0 ? cleaned : "project";
+}
+
 export function renderQuaiToml(options: InitOptions): string {
   const lines = [
     "# Quai project manifest.",
@@ -30,7 +48,7 @@ export function renderQuaiToml(options: InitOptions): string {
     "# For completion and checking in your editor, point it at:",
     "#   https://raw.githubusercontent.com/atinseau/quai/main/schema/quai.schema.json",
     "",
-    `name = ${quote(options.name)}`,
+    `name = ${quote(safeName(options.name))}`,
     `type = ${quote(options.type)}`,
   ];
 

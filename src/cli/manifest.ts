@@ -10,6 +10,8 @@
  * the wrong thing silently is worse than asking for one line of configuration.
  */
 
+import { formatManifestErrors, manifestSchema } from "./manifest-schema";
+
 export type ProjectType = "static" | "service" | "function";
 export type Runtime = "node" | "bun" | "python";
 
@@ -114,16 +116,22 @@ function requireString(value: unknown, field: string): string {
  * rather than passed through to fail later at deploy time.
  */
 export function parseQuaiToml(source: string): Manifest {
-  const parsed = Bun.TOML.parse(source) as Record<string, unknown>;
-
-  const type = requireString(parsed.type, "type");
-  if (type !== "static" && type !== "service" && type !== "function") {
+  let parsed: unknown;
+  try {
+    parsed = Bun.TOML.parse(source);
+  } catch (error) {
     throw new Error(
-      `Unknown project type '${type}'. Use one of: static, service, function.`,
+      "quai.toml is not valid TOML: " +
+        (error instanceof Error ? error.message : String(error)),
     );
   }
 
-  return { ...parsed, type } as Manifest;
+  const result = manifestSchema.safeParse(parsed);
+  if (!result.success) {
+    throw new Error(formatManifestErrors(result.error));
+  }
+
+  return result.data as Manifest;
 }
 
 /**

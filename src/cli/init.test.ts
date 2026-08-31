@@ -60,3 +60,42 @@ describe("generating a quai.toml", () => {
   });
 });
 
+
+describe("what init generates is always accepted", () => {
+  const { parseQuaiToml } = require("./manifest");
+
+  test("a directory name with a quote produces a valid manifest", () => {
+    // The generator must not emit a file its own parser refuses.
+    expect(() => parseQuaiToml(renderQuaiToml({ name: 'we"ird', type: "static" }))).not.toThrow();
+  });
+
+  test("an uppercase directory name is folded", () => {
+    const rendered = renderQuaiToml({ name: "MySite", type: "static" });
+    expect(rendered).toContain('name = "mysite"');
+  });
+
+  test("a directory name with spaces becomes hyphens", () => {
+    expect(renderQuaiToml({ name: "my cool site", type: "static" })).toContain(
+      'name = "my-cool-site"',
+    );
+  });
+
+  test("a name with nothing usable falls back rather than emitting an empty one", () => {
+    expect(() => parseQuaiToml(renderQuaiToml({ name: "!!!", type: "static" }))).not.toThrow();
+  });
+
+  test("a generated service manifest validates", () => {
+    expect(() =>
+      parseQuaiToml(
+        renderQuaiToml({
+          name: "api",
+          type: "service",
+          runtime: "node",
+          start: "node server.js",
+          internalPort: 3000,
+        }),
+      ),
+    ).not.toThrow();
+  });
+});
+
