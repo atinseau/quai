@@ -44,7 +44,19 @@ docker run -d --name "$NAME" --privileged \
   'dockerd-entrypoint.sh dockerd >/var/log/dockerd.log 2>&1 & exec /bin/sh /boot.sh' \
   >/dev/null || { echo "could not start the nested host"; exit 1; }
 
-# First boot formats the XFS image and pulls Quai.
+# A locally built image exists only on this machine, so it is handed to the
+# inner daemon directly. Without this the nested host would look for it in a
+# registry that has never heard of it.
+if docker image inspect "$IMAGE" >/dev/null 2>&1; then
+  for _ in $(seq 60); do
+    docker exec "$NAME" docker info >/dev/null 2>&1 && break
+    sleep 2
+  done
+  docker save "$IMAGE" | docker exec -i "$NAME" docker load >/dev/null 2>&1 \
+    || echo "  ..    could not preload $IMAGE; the nested host will pull it"
+fi
+
+# First boot formats the XFS image and starts Quai.
 for _ in $(seq 180); do
   curl -s -m 5 -H "Host: $ZONE" "http://localhost:$PORT/health" 2>/dev/null | grep -q healthy && break
   sleep 2

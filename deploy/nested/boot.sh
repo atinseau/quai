@@ -52,12 +52,40 @@ fi
 # quotas survive a restart of this container.
 mkdir -p "$DATA" "$HOMES"
 
+# An image already loaded into the inner daemon — as the test suite does with a
+# locally built one — must not be replaced by a registry lookup that would fail.
+if ! docker image inspect "$QUAI_IMAGE" >/dev/null 2>&1; then
+  log "pulling $QUAI_IMAGE"
+  if ! docker pull "$QUAI_IMAGE" >/dev/null 2>&1; then
+    # A pull can fail because the tag is local-only and still being loaded from
+    # outside, so failing here would lose a race rather than report a problem.
+    log "could not pull it; waiting for it to be loaded instead"
+    for _ in $(seq 120); do
+      docker image inspect "$QUAI_IMAGE" >/dev/null 2>&1 && break
+      sleep 1
+    done
+  fi
+fi
+
+docker image inspect "$QUAI_IMAGE" >/dev/null 2>&1 || {
+  log "$QUAI_IMAGE is not available to the inner daemon"
+  exit 1
+}
+
 if [ ! -f "$IMG" ]; then
   log "creating a ${QUAI_HOMES_SIZE}GiB XFS image (first boot only)"
   # fallocate is not available on every filesystem backing the volume; dd is.
   fallocate -l "${QUAI_HOMES_SIZE}G" "$IMG" 2>/dev/null ||
     dd if=/dev/zero of="$IMG" bs=1M count=$((QUAI_HOMES_SIZE * 1024)) status=none
-  mkfs.xfs -q "$IMG"
+
+  # Formatted with the Quai image's mkfs.xfs rather than this one.
+  #
+  # A newer xfsprogs enables on-disk features a slightly older kernel refuses,
+  # and the mount then fails with nothing but 'Invalid argument'. The version
+  # shipped alongside the supervisor is the one every kernel Quai supports has
+  # been verified against, so the filesystem is made by the same tool that
+  # will use it.
+  docker run --rm -v "$DATA:/data" --entrypoint mkfs.xfs "$QUAI_IMAGE" -q /data/homes.img
 fi
 
 # A restart re-enters this script with the mount gone, so mounting is
@@ -72,9 +100,6 @@ log "project homes carry prjquota"
 # Replacing rather than reusing: the container is disposable, while everything
 # worth keeping lives on the two volumes.
 docker rm -f quai >/dev/null 2>&1 || true
-
-log "pulling $QUAI_IMAGE"
-docker pull "$QUAI_IMAGE" >/dev/null
 
 log "starting the supervisor"
 # shellcheck disable=SC2086  # the token flag is deliberately unquoted: it must
