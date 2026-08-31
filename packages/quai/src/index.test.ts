@@ -57,11 +57,16 @@ describe("the package stands alone", () => {
   test("no Node types are required to use it", async () => {
     // Importing node:http would force @types/node on every user, including
     // projects that only deploy a static site or a Bun function.
-    const declaration = await Bun.file(
-      new URL("../dist/index.d.ts", import.meta.url).pathname,
+    //
+    // Read from the source rather than the build output: dist/ is generated
+    // and absent from a fresh checkout, so asserting against it passed locally
+    // and failed in CI.
+    const source = await Bun.file(
+      new URL("./index.ts", import.meta.url).pathname,
     ).text();
+
     // The comment explaining why may name them; an import must not.
-    const imports = declaration
+    const imports = source
       .split("\n")
       .filter((line) => /^\s*import\b/.test(line))
       .join("\n");
