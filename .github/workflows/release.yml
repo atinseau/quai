@@ -20,6 +20,9 @@ on:
 permissions:
   contents: write
   packages: write
+  # Required by 'npm publish --provenance', which signs the package against
+  # this workflow run. Without it the publish fails outright.
+  id-token: write
 
 jobs:
   verify:
@@ -130,6 +133,9 @@ jobs:
     name: Types package
     needs: verify
     runs-on: ubuntu-latest
+    # The publish token lives on this environment; a job that does not declare
+    # it cannot see the secret at all.
+    environment: production
     steps:
       - uses: actions/checkout@v4
 
