@@ -172,6 +172,9 @@ jobs:
 
       - uses: actions/download-artifact@v4
         with:
+          # Only the CLI builds: the build step also uploads a .dockerbuild
+          # record, and pulling everything made the download fail outright.
+          pattern: quai-*
           path: artifacts
           merge-multiple: true
 
