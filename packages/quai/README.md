@@ -1,13 +1,13 @@
-# quai
+# quai-types
 
 Types for [Quai](https://github.com/atinseau/quai) projects.
 
-    npm install --save-dev quai
+    npm install --save-dev quai-types
 
 ## Functions
 
 ```ts
-import { defineHandler } from "quai";
+import { defineHandler } from "quai-types";
 
 export default defineHandler((request, response) => {
   response.end(JSON.stringify({ path: request.url }));
@@ -17,7 +17,7 @@ export default defineHandler((request, response) => {
 On Bun, use `defineBunHandler` and the platform's fetch-style handler:
 
 ```ts
-import { defineBunHandler } from "quai";
+import { defineBunHandler } from "quai-types";
 
 export default defineBunHandler((request) =>
   Response.json({ path: new URL(request.url).pathname }),
@@ -30,7 +30,7 @@ export default defineBunHandler((request) =>
 and checking while you work out what to put in it:
 
 ```ts
-import { defineConfig } from "quai";
+import { defineConfig } from "quai-types";
 
 export default defineConfig({
   type: "service",

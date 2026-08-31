@@ -92,10 +92,10 @@ disk, with no process, as in production.
 
 For typed handlers and a checked manifest:
 
-    npm install --save-dev quai
+    npm install --save-dev quai-types
 
 ```ts
-import { defineHandler } from "quai";
+import { defineHandler } from "quai-types";
 
 export default defineHandler((request, response) => {
   response.end(JSON.stringify({ path: request.url }));

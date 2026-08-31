@@ -1,5 +1,5 @@
 {
-  "name": "quai",
+  "name": "quai-types",
   "version": "0.1.0",
   "description": "Types for Quai projects: handlers and quai.toml",
   "license": "MIT",
@@ -8,7 +8,13 @@
     "url": "git+https://github.com/atinseau/quai.git",
     "directory": "packages/quai"
   },
-  "keywords": ["quai", "paas", "self-hosted", "coolify", "types"],
+  "keywords": [
+    "quai",
+    "paas",
+    "self-hosted",
+    "coolify",
+    "types"
+  ],
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -19,7 +25,10 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist", "README.md"],
+  "files": [
+    "dist",
+    "README.md"
+  ],
   "sideEffects": false,
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
@@ -29,4 +38,3 @@
     "typescript": "^5"
   }
 }
-
