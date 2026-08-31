@@ -168,6 +168,9 @@ jobs:
             echo "::warning::NPM_TOKEN is not set; skipping the types package."
             exit 0
           fi
+          # Who the token authenticates as, so a refusal can be told from a
+          # missing credential.
+          npm whoami || echo "::warning::the token does not authenticate"
           npm publish --access public --provenance
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
