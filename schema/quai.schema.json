@@ -1,0 +1,102 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://raw.githubusercontent.com/atinseau/quai/main/schema/quai.schema.json",
+  "title": "quai.toml",
+  "description": "A Quai project manifest. Everything is optional: a plain static directory deploys without one.",
+  "type": "object",
+  "required": ["type"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Defaults to the directory name, which is what makes redeploying idempotent.",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "maxLength": 63
+    },
+    "type": {
+      "enum": ["static", "service", "function"],
+      "description": "static serves files with no process; service runs a long-lived process; function is a single handler Quai hosts."
+    },
+    "runtime": {
+      "enum": ["node", "bun", "python"],
+      "description": "Which runtime hosts the project. Detected from the files when omitted."
+    },
+    "build": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Runs on your machine, never on the server.",
+      "properties": {
+        "command": { "type": "string", "description": "e.g. npm run build" },
+        "output": {
+          "type": "string",
+          "description": "Directory to ship instead of the whole project, e.g. dist."
+        }
+      }
+    },
+    "service": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "internal_port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "description": "Declared, never guessed. Two projects may use the same port: each has its own network namespace."
+        },
+        "start": {
+          "type": "string",
+          "description": "Command that starts the process, e.g. node server.js. For a function, the handler file."
+        }
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Absent values keep Quai's defaults.",
+      "properties": {
+        "memory": {
+          "type": "string",
+          "pattern": "^\\d+(\\.\\d+)?\\s*(K|M|G|Ki|Mi|Gi)?$",
+          "description": "e.g. 256Mi, 1Gi. Exceeding it kills the project, not its neighbours."
+        },
+        "cpu": {
+          "type": "string",
+          "pattern": "^\\d+(\\.\\d+)?$",
+          "description": "Fraction of a core, e.g. 0.5 or 2."
+        },
+        "pids": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum processes. This is what contains a fork bomb."
+        },
+        "disk": {
+          "type": "string",
+          "pattern": "^\\d+(\\.\\d+)?\\s*(K|M|G|Ki|Mi|Gi)?$",
+          "description": "e.g. 1Gi. Enforced by an XFS project quota."
+        },
+        "timeout": {
+          "type": "string",
+          "pattern": "^\\d+\\s*(s|m)?$",
+          "description": "Functions only, e.g. 30s. A stuck request gets a 504 rather than hanging."
+        }
+      }
+    },
+    "domains": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "custom": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Served alongside the automatic subdomain. Removing one here retires it on the next deploy."
+        }
+      }
+    },
+    "env": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "description": "Variables for the process. PORT, HOME and USER are set by Quai and cannot be overridden."
+    }
+  }
+}
+

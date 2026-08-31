@@ -26,6 +26,9 @@ export function renderQuaiToml(options: InitOptions): string {
   const lines = [
     "# Quai project manifest.",
     "# Everything here is optional: a plain static directory deploys without it.",
+    "#",
+    "# For completion and checking in your editor, point it at:",
+    "#   https://raw.githubusercontent.com/atinseau/quai/main/schema/quai.schema.json",
     "",
     `name = ${quote(options.name)}`,
     `type = ${quote(options.type)}`,

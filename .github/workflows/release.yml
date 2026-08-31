@@ -103,9 +103,36 @@ jobs:
           name: "quai-${{ matrix.target }}"
           path: "quai-${{ matrix.target }}"
 
+  npm:
+    name: Types package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - name: Match the package version to the tag
+        # The types describe a specific release of the product, so publishing
+        # them under a different number would make the pairing guesswork.
+        working-directory: packages/quai
+        run: npm version "${GITHUB_REF_NAME#v}" --no-git-tag-version --allow-same-version
+
+      - name: Build
+        working-directory: packages/quai
+        run: npm install && npm run build
+
+      - name: Publish
+        working-directory: packages/quai
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
   publish:
     name: Publish the release
-    needs: [image, cli]
+    needs: [image, cli, npm]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -125,7 +152,9 @@ jobs:
         # Shipping install.sh as a release asset is what lets the documented
         # URL point at a tag instead of a branch: a branch would hand out
         # whatever was merged last, which is not a release anyone tested.
-        run: cp install.sh artifacts/install.sh
+        run: |
+          cp install.sh artifacts/install.sh
+          cp schema/quai.schema.json artifacts/quai.schema.json
 
       - uses: softprops/action-gh-release@v2
         with:
@@ -134,4 +163,5 @@ jobs:
             artifacts/quai-*
             artifacts/checksums.txt
             artifacts/install.sh
+            artifacts/quai.schema.json
 

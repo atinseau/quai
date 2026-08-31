@@ -28,6 +28,10 @@ jobs:
       - run: bun run typecheck
       - run: bun test
 
+      - name: The published types must compile on their own
+        working-directory: packages/quai
+        run: bun install && bunx tsc -p tsconfig.build.json
+
   integration:
     name: Isolation guarantees
     runs-on: ubuntu-latest

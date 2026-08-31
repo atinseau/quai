@@ -12,6 +12,7 @@ import { basename, join, resolve } from "node:path";
 import { collectFiles } from "./collect";
 import { formatEnvFile, isReservedEnvKey, parseEnvAssignment } from "./env";
 import { configPath, readConfig, writeConfig } from "./config";
+import { localRunPlan } from "./dev";
 import { renderQuaiToml } from "./init";
 import { latestReleaseUrl, releaseAssetUrl, targetTriple } from "./release";
 import { replaceRunningBinary, uninstallPlan } from "./self-update";
@@ -329,6 +330,66 @@ async function uninstallCommand(args: string[]): Promise<void> {
   console.log("quai removed. Deployed projects keep running.");
 }
 
+/**
+ * Runs the project locally, the way the server would.
+ *
+ * A function is served by the same host the supervisor uses, so a handler that
+ * answers here answers there — the point being to find a mistake before a
+ * deploy rather than after one.
+ */
+async function devCommand(args: string[]): Promise<void> {
+  const flagIndex = args.findIndex((argument) => argument === "--port" || argument === "-p");
+  const port = flagIndex === -1 ? 3000 : Number(args[flagIndex + 1] ?? 3000);
+  const directory = args.find(
+    (argument, index) => !argument.startsWith("-") && index !== flagIndex + 1,
+  );
+  const root = resolve(directory ?? process.cwd());
+
+  let spec: DeploySpec;
+  try {
+    spec = resolveDeploySpec(new Set(await readdir(root)), await readManifest(root));
+  } catch (error) {
+    fail(error instanceof Error ? error.message : String(error));
+  }
+
+  if (spec.build?.command) await runBuild(root, spec.build.command);
+
+  const plan = localRunPlan(spec, { root, port });
+
+  if (plan.serveStatic !== null) {
+    const directoryToServe = plan.serveStatic;
+    Bun.serve({
+      port,
+      async fetch(request) {
+        const path = new URL(request.url).pathname;
+        const file = Bun.file(join(directoryToServe, path.endsWith("/") ? path + "index.html" : path));
+        return (await file.exists())
+          ? new Response(file)
+          : new Response("Not found", { status: 404 });
+      },
+    });
+    console.log(`Serving ${directoryToServe} on http://localhost:${port}`);
+    return;
+  }
+
+  console.log(`Running ${spec.type} on http://localhost:${port} (ctrl-c to stop)`);
+
+  const child = Bun.spawn(plan.command, {
+    cwd: plan.cwd,
+    env: { ...process.env, ...plan.env },
+    stdout: "inherit",
+    stderr: "inherit",
+  });
+
+  // Ctrl-C should stop the project, not orphan it.
+  process.on("SIGINT", () => {
+    child.kill();
+    process.exit(0);
+  });
+
+  await child.exited;
+}
+
 async function login(host: string, zone: string): Promise<void> {
   if (!host || !zone) fail("usage: quai login <user@host> <zone>");
   await writeConfig({ host, zone });
@@ -346,6 +407,9 @@ switch (command) {
     await deploy(directory, production);
     break;
   }
+  case "dev":
+    await devCommand(rest);
+    break;
   case "init":
     await init(rest[0] ?? process.cwd());
     break;
@@ -382,6 +446,7 @@ switch (command) {
         "  quai                      deploy the current directory",
         "  quai --prod               deploy to the production domain",
         "  quai deploy [dir]         deploy a specific directory",
+        "  quai dev [--port N]       run the project locally, as the server would",
         "  quai init [dir]           write a quai.toml for this project",
         "  quai env ls|add|rm|pull   manage environment variables",
         "  quai logs [-f]            show recent output, -f to follow",

@@ -79,6 +79,35 @@ a static site; a lone `api.js` deploys as a function. Where detection would have
 to guess — a `package.json` next to a `requirements.txt` — Quai refuses and asks
 for one line rather than deploying the wrong thing.
 
+## Working on a project
+
+    quai dev              # run it locally, exactly the way the server will
+    quai dev --port 4000
+
+A function runs under the same host the supervisor uses, so a handler that
+answers locally answers once deployed. A static project is served straight from
+disk, with no process, as in production.
+
+For typed handlers and a checked manifest:
+
+    npm install --save-dev quai
+
+```ts
+import { defineHandler } from "quai";
+
+export default defineHandler((request, response) => {
+  response.end(JSON.stringify({ path: request.url }));
+});
+```
+
+The helpers return their argument untouched: they exist for the type checker,
+so the code that runs on the server is exactly the code you wrote. See
+[packages/quai](packages/quai).
+
+Editors that understand JSON Schema can complete and check `quai.toml` from
+[schema/quai.schema.json](schema/quai.schema.json); `quai init` writes the
+pointer into the file it generates.
+
 ## quai.toml
 
 Optional. Only the parts you need:
