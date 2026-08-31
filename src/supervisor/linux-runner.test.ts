@@ -55,7 +55,12 @@ describe("launch contract", () => {
   });
 
   test("the command is the last thing on the line, so nothing shadows it", () => {
-    expect(runner.argvFor(spec).slice(-2)).toEqual(["node", "server.js"]);
+    // The interpreter is resolved against the machine's real PATH, so assert
+    // the shape rather than a literal: this passed on a laptop without
+    // /usr/local/bin/node and failed on a CI runner that has one.
+    const argv = runner.argvFor(spec);
+    expect(argv.at(-1)).toBe("server.js");
+    expect(argv.at(-2)).toMatch(/(^|\/)node$/);
   });
 
   test("a project variable cannot override the uid switch", () => {
@@ -87,7 +92,9 @@ describe("launching inside a namespace", () => {
   });
 
   test("the command still ends the line inside a namespace", () => {
-    expect(runner.argvFor(spec, namespace).slice(-2)).toEqual(["node", "server.js"]);
+    const argv = runner.argvFor(spec, namespace);
+    expect(argv.at(-1)).toBe("server.js");
+    expect(argv.at(-2)).toMatch(/(^|\/)node$/);
   });
 
   test("two projects listening on the same port get different addresses", () => {
