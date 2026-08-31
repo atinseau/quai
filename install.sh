@@ -66,6 +66,10 @@ echo "Installing quai ${VERSION} (${TARGET})"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
+if [ "$os" = "darwin" ] && [ "$arch" = "x64" ]; then
+  die "no prebuilt binary for Intel Macs. Build one with: bun build --compile src/cli/main.ts"
+fi
+
 curl -fSL --progress-bar "${ASSETS}/${TARGET}" -o "$TMP/quai" \
   || die "could not download ${TARGET} for ${VERSION} — check that this release has a build for your machine"
 

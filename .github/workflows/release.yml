@@ -86,6 +86,8 @@ jobs:
     needs: verify
     runs-on: ${{ matrix.os }}
     strategy:
+      # A stuck runner must not hold the other builds hostage.
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
@@ -94,8 +96,6 @@ jobs:
             target: linux-arm64
           - os: macos-latest
             target: darwin-arm64
-          - os: macos-13
-            target: darwin-x64
     steps:
       - uses: actions/checkout@v4
 
