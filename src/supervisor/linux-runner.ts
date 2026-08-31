@@ -17,6 +17,7 @@ import { accountNameFor } from "./accounts";
 import { DEFAULT_LIMITS, ProjectCgroup, type Limits } from "./cgroup";
 import { containerCgroupPath } from "./cgroup-path";
 import { EgressPolicy, natCommands, natInstallCommand } from "./egress";
+import { PersistentLog } from "./log-file";
 import { LogBuffer } from "./logs";
 import { buildJailArgs, resolveExecutable } from "./seccomp";
 import { NetworkNamespace, allocateSubnet } from "./netns";
@@ -28,12 +29,16 @@ export const SECCOMP_POLICY_PATH = "/etc/quai/seccomp.policy";
 /** Enough to diagnose a failed start without unbounded growth. */
 const MAX_LOG_LINES = 500;
 
+/** Where logs are kept so they outlive a supervisor restart. */
+export const LOG_DIRECTORY = process.env.QUAI_LOGS ?? "/srv/quai/state/logs";
+
 type Running = {
   handle: RunHandle;
   process: Bun.Subprocess;
   namespace: NetworkNamespace | null;
   cgroup: ProjectCgroup | null;
   logs: LogBuffer;
+  file: PersistentLog | null;
 };
 
 async function run(argv: string[]): Promise<{ ok: boolean; stderr: string }> {
@@ -248,9 +253,19 @@ export class LinuxRunner implements Runner {
       address: namespace?.subnet.projectAddress ?? "127.0.0.1",
     };
     const logs = new LogBuffer(MAX_LOG_LINES);
-    this.captureOutput(child, logs);
+    // Written to disk as well: the buffer answers reads, the file survives a
+    // restart so a crash during the night can still be diagnosed.
+    const file = new PersistentLog(LOG_DIRECTORY, spec.project);
+    this.captureOutput(child, logs, file);
 
-    this.processes.set(spec.project, { handle, process: child, namespace, cgroup, logs });
+    this.processes.set(spec.project, {
+      handle,
+      process: child,
+      namespace,
+      cgroup,
+      logs,
+      file,
+    });
     return handle;
   }
 
@@ -294,22 +309,47 @@ export class LinuxRunner implements Runner {
    * Reading continuously matters: an unread pipe fills and blocks the project
    * once it has written enough.
    */
-  private captureOutput(child: Bun.Subprocess, logs: LogBuffer): void {
+  private captureOutput(
+    child: Bun.Subprocess,
+    logs: LogBuffer,
+    file: PersistentLog | null,
+  ): void {
     for (const stream of [child.stdout, child.stderr]) {
       if (!(stream instanceof ReadableStream)) continue;
 
       void (async () => {
         const decoder = new TextDecoder();
         for await (const chunk of stream) {
-          logs.append(decoder.decode(chunk as Uint8Array, { stream: true }));
+          const text = decoder.decode(chunk as Uint8Array, { stream: true });
+          logs.append(text);
+          await file?.append(text).catch(() => {});
         }
       })().catch(() => {});
     }
   }
 
-  /** Recent output of a project, or null when it is not running. */
+  /**
+   * Recent output of a project.
+   *
+   * Falls back to the file when the project is not running, so the output of a
+   * crashed project is still readable.
+   */
   logs(project: string): string | null {
     return this.processes.get(project)?.logs.read() ?? null;
+  }
+
+  /** Reads a project's persisted log, including one that is not running. */
+  async logsFromDisk(project: string): Promise<string | null> {
+    try {
+      return await new PersistentLog(LOG_DIRECTORY, project).read();
+    } catch {
+      return null;
+    }
+  }
+
+  /** Removes a project's persisted log. */
+  async removeLogs(project: string): Promise<void> {
+    await new PersistentLog(LOG_DIRECTORY, project).remove().catch(() => {});
   }
 }
 

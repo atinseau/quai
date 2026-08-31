@@ -20,6 +20,9 @@ export const ADMIN_ACTIONS = [
   "remove",
   "domains",
   "status",
+  "backup",
+  "restore",
+  "list",
 ] as const;
 export type AdminAction = (typeof ADMIN_ACTIONS)[number];
 
@@ -43,8 +46,11 @@ export function parseAdminCommand(requested: string): AdminRequest {
     throw new Error(`Unknown action '${action}'`);
   }
 
+  // Instance-wide actions name no project; everything else must name a valid one.
+  const instanceWide = action === "list" || action === "backup" || action === "restore";
   const project = parts[2] ?? "";
-  if (!/^[a-z0-9][a-z0-9-]*$/.test(project)) {
+
+  if (!instanceWide && !/^[a-z0-9][a-z0-9-]*$/.test(project)) {
     throw new Error(`Invalid project name '${project}'`);
   }
 

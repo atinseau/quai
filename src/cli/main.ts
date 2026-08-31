@@ -229,6 +229,80 @@ async function init(directory: string): Promise<void> {
   console.log("Wrote quai.toml (" + (detected?.type ?? "static") + "). Edit it, then run 'quai'.");
 }
 
+/** Lists every project on the instance, so it need not be known by name. */
+async function listCommand(): Promise<void> {
+  const config = await readConfig();
+  if (config === null) fail("not logged in. Run 'quai login <user@host> <zone>' first.");
+
+  const projects = JSON.parse(await admin("list", "")) as {
+    name: string;
+    type: string;
+    run: { state: string };
+    givenUp?: boolean;
+  }[];
+
+  if (projects.length === 0) {
+    console.log("No projects on this instance yet.");
+    return;
+  }
+
+  const width = Math.max(...projects.map((project) => project.name.length));
+  for (const project of projects) {
+    const state = project.givenUp ? "given up" : project.run.state;
+    console.log(
+      project.name.padEnd(width) +
+        "  " + project.type.padEnd(8) +
+        "  " + state.padEnd(9) +
+        "  https://" + project.name + "." + config.zone,
+    );
+  }
+}
+
+/** Opens the project's URL, so it need not be retyped. */
+async function openCommand(directory: string): Promise<void> {
+  const config = await readConfig();
+  if (config === null) fail("not logged in. Run 'quai login <user@host> <zone>' first.");
+
+  const url = `https://${projectNameFromPath(resolve(directory))}.${config.zone}`;
+  const opener = process.platform === "darwin" ? "open" : "xdg-open";
+
+  const proc = Bun.spawn([opener, url], { stdout: "ignore", stderr: "ignore" });
+  await proc.exited;
+
+  // Printing it too means the command is still useful over SSH, where no
+  // browser can be opened.
+  console.log(url);
+}
+
+/** Writes a backup of the instance to a file. */
+async function backupCommand(args: string[]): Promise<void> {
+  const path = args.find((argument) => !argument.startsWith("-")) ?? "quai-backup.json";
+  const backup = await admin("backup", "");
+
+  await Bun.write(path, backup);
+
+  const parsed = JSON.parse(backup) as { projects: { name: string }[] };
+  console.log(`Wrote ${path} (${parsed.projects.length} project(s)).`);
+}
+
+/** Restores an instance from a backup file. */
+async function restoreCommand(args: string[]): Promise<void> {
+  const path = args.find((argument) => !argument.startsWith("-"));
+  if (path === undefined) fail("usage: quai restore <backup.json>");
+
+  const contents = await Bun.file(path).text().catch(() => null);
+  if (contents === null) fail(`could not read ${path}`);
+
+  const parsed = JSON.parse(contents) as { projects: { name: string }[]; takenAt: number };
+  console.log(
+    `Restoring ${parsed.projects.length} project(s) from ${new Date(parsed.takenAt).toISOString()}`,
+  );
+
+  const result = await admin("restore", "", JSON.parse(contents));
+  console.log(result.trim());
+  console.log("Redeploy each project to bring its content back.");
+}
+
 /** Shows what is actually enforced for this project. */
 async function statusCommand(directory: string): Promise<void> {
   const project = projectNameFromPath(resolve(directory));
@@ -416,6 +490,18 @@ switch (command) {
   case "env":
     await envCommand(rest, process.cwd());
     break;
+  case "list":
+    await listCommand();
+    break;
+  case "open":
+    await openCommand(rest[0] ?? process.cwd());
+    break;
+  case "backup":
+    await backupCommand(rest);
+    break;
+  case "restore":
+    await restoreCommand(rest);
+    break;
   case "status":
     await statusCommand(rest[0] ?? process.cwd());
     break;
@@ -451,6 +537,10 @@ switch (command) {
         "  quai env ls|add|rm|pull   manage environment variables",
         "  quai logs [-f]            show recent output, -f to follow",
         "  quai status               show the limits actually enforced",
+        "  quai list                 list every project on the instance",
+        "  quai open                 open this project in a browser",
+        "  quai backup [file]        write a backup of the instance",
+        "  quai restore <file>       restore an instance from a backup",
         "  quai rm                   delete the project and everything it owns",
         "",
         "  quai update [tag]         replace this binary with a newer release",

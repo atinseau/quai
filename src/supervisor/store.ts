@@ -113,6 +113,40 @@ export class Store {
     );
   }
 
+  /**
+   * Writes a project back exactly as it was, uid included.
+   *
+   * Distinct from upsertProject, which assigns a uid: a restored project must
+   * keep the one it had, since the files it owns on the quota volume are owned
+   * by number.
+   */
+  restoreProject(project: StoredProject): void {
+    this.database.run(
+      `INSERT INTO projects (name, type, uid, internal_port, command, netns_index)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(name) DO UPDATE SET type = excluded.type,
+                                       uid = excluded.uid,
+                                       internal_port = excluded.internal_port,
+                                       command = excluded.command,
+                                       netns_index = excluded.netns_index`,
+      [
+        project.name,
+        project.type,
+        project.uid,
+        project.internalPort,
+        project.command,
+        project.netnsIndex,
+      ],
+    );
+
+    // Keep the watermark ahead of every restored uid, so a new project cannot
+    // be handed one that a restored project already owns.
+    this.database.run(
+      "UPDATE uid_watermark SET next = MAX(next, ?) WHERE id = 1",
+      [project.uid + 1],
+    );
+  }
+
   removeProject(name: string): void {
     this.database.run("DELETE FROM projects WHERE name = ?", [name]);
   }

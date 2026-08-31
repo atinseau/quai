@@ -25,6 +25,7 @@ import { handleRequest } from "./router";
 import { ProjectSupervisor } from "./runner";
 import { SiteStore } from "./sites";
 import { openStore } from "./store";
+import { captureBackup, restoreBackup, type Backup } from "./backup";
 import { ProjectQuota, parseQuotaReport } from "./quota";
 import { containerCgroupPath } from "./cgroup-path";
 import { readRuntimes, readSystem } from "./system";
@@ -172,6 +173,17 @@ for (const project of store.list()) {
     );
 }
 
+// Crashed projects come back on their own. Without this a passing
+// out-of-memory kill retires a project until someone redeploys by hand.
+const REVIVE_INTERVAL_MS = 5_000;
+setInterval(() => {
+  void projects
+    .reviveCrashed(Date.now, (project, reason) =>
+      console.error(`project '${project}' ${reason}`),
+    )
+    .catch((error: Error) => console.error("revive pass failed: " + error.message));
+}, REVIVE_INTERVAL_MS);
+
 const health = buildHealthReport({ isolation, runtimes });
 
 Bun.serve({
@@ -279,10 +291,27 @@ Bun.serve({
         }
       }
 
+      if (url.pathname === "/_quai/backup" && request.method === "GET") {
+        return Response.json(await captureBackup(store));
+      }
+
+      if (url.pathname === "/_quai/restore" && request.method === "POST") {
+        try {
+          const backup = (await request.json()) as Backup;
+          await restoreBackup(store, backup);
+          return Response.json({ restored: backup.projects.length });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          return Response.json({ error: message }, { status: 400 });
+        }
+      }
+
       if (url.pathname === "/_quai/logs") {
-        const lines = projects.logsFor(project);
+        // From disk when the project is not running: a crashed project is
+        // exactly the one whose logs an operator wants.
+        const lines = await projects.logsIncludingStopped(project);
         if (lines === null) {
-          return Response.json({ error: "No such running project" }, { status: 404 });
+          return Response.json({ error: "No such project" }, { status: 404 });
         }
         return new Response(lines, { headers: { "content-type": "text/plain" } });
       }
@@ -301,6 +330,7 @@ Bun.serve({
         // Order matters: stop the process before removing what it runs on, so
         // nothing is left holding a deleted home.
         await projects.stop(project);
+        await projects.discardLogs(project);
 
         // Release the quota before the content disappears, so the limit does
         // not linger against a project id that no longer exists.
@@ -343,6 +373,7 @@ Bun.serve({
             type: project.type,
             uid: project.uid,
             run: await projects.status(project.name),
+            givenUp: projects.givenUp().includes(project.name),
             limits: {
               memory: await readLimit("memory.max"),
               cpu: await readLimit("cpu.max"),
