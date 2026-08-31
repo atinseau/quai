@@ -91,7 +91,22 @@ fi
 # A restart re-enters this script with the mount gone, so mounting is
 # unconditional but tolerates being asked twice.
 if ! grep -q " $HOMES " /proc/mounts; then
-  mount -o loop,prjquota "$IMG" "$HOMES"
+  # '-t xfs' is not decoration.
+  #
+  # Without a type, busybox mount tries each filesystem already listed in
+  # /proc/filesystems. Where xfs is a module the host has not loaded yet, it is
+  # absent from that list, never tried, and the failure surfaces as a bare
+  # 'Invalid argument' that says nothing about a missing module. Naming the
+  # type makes the kernel load it on demand instead.
+  if ! mount -t xfs -o loop,prjquota "$IMG" "$HOMES" 2>&1; then
+    # 'Invalid argument' is all mount says when a loop mount is refused, which
+    # covers several unrelated causes. The kernel log names the real one.
+    log "the loop mount was refused; what the kernel said:"
+    dmesg 2>/dev/null | tail -15 | sed 's/^/    /' || log "    (dmesg unavailable)"
+    log "xfs support: $(grep -c xfs /proc/filesystems) entry/entries in /proc/filesystems"
+    log "loop devices: $(losetup -a 2>&1 | head -3)"
+    exit 1
+  fi
 fi
 grep -q " $HOMES " /proc/mounts || { log "the XFS volume did not mount"; exit 1; }
 log "project homes carry prjquota"
