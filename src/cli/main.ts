@@ -11,8 +11,10 @@ import { readdir, readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { collectFiles } from "./collect";
 import { formatEnvFile, isReservedEnvKey, parseEnvAssignment } from "./env";
-import { readConfig, writeConfig } from "./config";
+import { configPath, readConfig, writeConfig } from "./config";
 import { renderQuaiToml } from "./init";
+import { latestReleaseUrl, releaseAssetUrl, targetTriple } from "./release";
+import { replaceRunningBinary, uninstallPlan } from "./self-update";
 import { deployQuery } from "./deploy-query";
 import { detectProjectType, resolveDeploySpec, type DeploySpec } from "./manifest";
 import { projectNameFromPath } from "../supervisor/naming";
@@ -236,6 +238,97 @@ async function statusCommand(directory: string): Promise<void> {
   console.log(JSON.stringify(found, null, 2));
 }
 
+/** Stamped at build time so 'quai update' can tell whether it is current. */
+const VERSION = process.env.QUAI_BUILD_VERSION ?? "0.1.0-dev";
+
+const REPOSITORY = process.env.QUAI_REPO ?? "atinseau/quai";
+
+/** The tag of the newest published release. */
+async function latestTag(): Promise<string> {
+  const response = await fetch(latestReleaseUrl(REPOSITORY), {
+    headers: { accept: "application/vnd.github+json" },
+  });
+  if (!response.ok) fail(`could not reach GitHub to check for updates (${response.status})`);
+
+  const release = (await response.json()) as { tag_name?: string };
+  if (!release.tag_name) fail("no published release found");
+  return release.tag_name;
+}
+
+/**
+ * Replaces this binary with the newest release.
+ *
+ * The new build is downloaded and checked before anything is moved, so a
+ * failed update leaves a working quai behind rather than a broken one — which
+ * matters more here than anywhere else, since a broken quai cannot repair
+ * itself.
+ */
+async function updateCommand(args: string[]): Promise<void> {
+  const requested = args.find((argument) => !argument.startsWith("-"));
+  const tag = requested ?? (await latestTag());
+
+  // Whether the tag was asked for or resolved, downloading what is already
+  // installed only risks a failed swap for nothing.
+  if (tag === `v${VERSION}` && !args.includes("--force")) {
+    console.log(`quai ${VERSION} is already installed. Use --force to reinstall it.`);
+    return;
+  }
+
+  const target = targetTriple(process.platform === "darwin" ? "Darwin" : "Linux", process.arch === "arm64" ? "arm64" : "x86_64");
+  const current = process.execPath;
+  const staged = current + ".new";
+
+  console.log(`Updating quai ${VERSION} -> ${tag} (${target})`);
+
+  const response = await fetch(releaseAssetUrl(REPOSITORY, tag, target));
+  if (!response.ok) {
+    fail(`could not download ${target} for ${tag} (${response.status})`);
+  }
+
+  await Bun.write(staged, await response.arrayBuffer());
+
+  // Verify the download runs before it becomes the binary on the PATH.
+  await chmodExecutable(staged);
+  const probe = Bun.spawn([staged, "--version"], { stdout: "pipe", stderr: "pipe" });
+  await probe.exited;
+  if (probe.exitCode !== 0) {
+    await Bun.file(staged).delete().catch(() => {});
+    fail("the downloaded binary does not run; nothing was changed");
+  }
+
+  const backup = await replaceRunningBinary(current, staged);
+  console.log(`Updated to ${tag}. The previous binary is at ${backup}.`);
+}
+
+async function chmodExecutable(path: string): Promise<void> {
+  const { chmod } = await import("node:fs/promises");
+  await chmod(path, 0o755);
+}
+
+/** Removes the CLI and its login configuration, and nothing else. */
+async function uninstallCommand(args: string[]): Promise<void> {
+  const { rm } = await import("node:fs/promises");
+  const { dirname } = await import("node:path");
+
+  const plan = uninstallPlan(process.execPath, dirname(configPath()));
+
+  if (!args.includes("--yes") && !args.includes("-y")) {
+    console.log("quai uninstall would remove:");
+    console.log(`  ${plan.binary}`);
+    console.log(`  ${plan.config}`);
+    console.log("");
+    console.log("Your projects and anything already deployed are untouched.");
+    console.log("Run 'quai uninstall --yes' to go ahead.");
+    return;
+  }
+
+  await rm(plan.config, { recursive: true, force: true });
+  await rm(plan.binary + ".old", { force: true }).catch(() => {});
+  await rm(plan.binary, { force: true });
+
+  console.log("quai removed. Deployed projects keep running.");
+}
+
 async function login(host: string, zone: string): Promise<void> {
   if (!host || !zone) fail("usage: quai login <user@host> <zone>");
   await writeConfig({ host, zone });
@@ -268,6 +361,16 @@ switch (command) {
   case "rm":
     await removeCommand(rest[0] ?? process.cwd());
     break;
+  case "update":
+    await updateCommand(rest);
+    break;
+  case "uninstall":
+    await uninstallCommand(rest);
+    break;
+  case "--version":
+  case "version":
+    console.log(VERSION);
+    break;
   case "login":
     await login(rest[0] ?? "", rest[1] ?? "");
     break;
@@ -284,6 +387,10 @@ switch (command) {
         "  quai logs [-f]            show recent output, -f to follow",
         "  quai status               show the limits actually enforced",
         "  quai rm                   delete the project and everything it owns",
+        "",
+        "  quai update [tag]         replace this binary with a newer release",
+        "  quai uninstall            remove the CLI and its configuration",
+        "  quai version              print the installed version",
         "  quai login <host> <zone>  point the CLI at an instance",
       ].join("\n"),
     );

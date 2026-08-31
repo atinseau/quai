@@ -34,11 +34,31 @@ would be worse than failing.
 
 ## Installing the CLI
 
-    curl -fsSL https://raw.githubusercontent.com/atinseau/quai/main/install.sh | sh
+    curl -fsSL https://github.com/atinseau/quai/releases/latest/download/install.sh | sh
 
-The binary is standalone, so nothing else has to be installed first. It is
-verified against the published checksums before it lands on your PATH. Set
-`QUAI_VERSION` for a specific tag or `QUAI_INSTALL` for another directory.
+Or pin a version:
+
+    curl -fsSL https://github.com/atinseau/quai/releases/download/v0.1.0/install.sh | sh
+
+Both URLs point at a release. There is deliberately no install from a branch:
+`main` is whatever was merged last, not something anyone released, and an
+install run a year from now should do what it did today.
+
+The binary is standalone, so nothing else has to be installed first, and it is
+checked against the published checksums before it lands on your PATH. Set
+`QUAI_INSTALL` to choose another directory.
+
+Afterwards the CLI maintains itself:
+
+    quai update          # replace this binary with the newest release
+    quai update v0.2.0   # or a specific one
+    quai uninstall       # remove the CLI and its login configuration
+
+`quai update` downloads the new build and checks that it runs before anything
+is moved, so a failed update leaves a working `quai` behind — which matters
+more here than anywhere else, since a broken `quai` cannot repair itself.
+`quai uninstall` touches only the binary and its configuration; your projects
+and anything already deployed are left alone.
 
 ## Using it
 

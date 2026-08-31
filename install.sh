@@ -1,10 +1,15 @@
 #!/bin/sh
 # Quai CLI installer.
 #
-#   curl -fsSL https://raw.githubusercontent.com/atinseau/quai/main/install.sh | sh
+# Install the latest release:
+#   curl -fsSL https://github.com/atinseau/quai/releases/latest/download/install.sh | sh
 #
-# Downloads the binary for this machine and puts it on the PATH. The CLI is
-# compiled standalone, so nothing else has to be installed first.
+# Install a specific one:
+#   curl -fsSL https://github.com/atinseau/quai/releases/download/v0.1.0/install.sh | sh
+#
+# Both URLs are tied to a release. There is deliberately no install from a
+# branch: main is whatever was merged last, not something anyone released, and
+# an install run a year from now should do what it did today.
 #
 # Environment:
 #   QUAI_VERSION   a tag such as v0.1.0, defaults to the latest release
@@ -14,6 +19,8 @@ set -eu
 
 REPO="${QUAI_REPO:-atinseau/quai}"
 INSTALL_DIR="${QUAI_INSTALL:-$HOME/.local/bin}"
+BASE="${QUAI_BASE_URL:-https://github.com}"
+API="${QUAI_API_URL:-https://api.github.com}"
 
 die() { echo "quai: $1" >&2; exit 1; }
 
@@ -26,25 +33,31 @@ case "$(uname -s)" in
 esac
 
 case "$(uname -m)" in
-  x86_64|amd64) arch="x64" ;;
+  x86_64|amd64)  arch="x64" ;;
   arm64|aarch64) arch="arm64" ;;
   *) die "unsupported architecture: $(uname -m)" ;;
 esac
 
 TARGET="quai-${os}-${arch}"
 
-# --- which version --------------------------------------------------------
+# --- which release --------------------------------------------------------
 
 if [ -n "${QUAI_VERSION:-}" ]; then
   VERSION="$QUAI_VERSION"
 else
-  # Resolve the latest tag without needing jq on the user's machine.
-  VERSION="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" \
+  # Resolve the newest tag without needing jq on the user's machine.
+  VERSION="$(curl -fsSL "${API}/repos/${REPO}/releases/latest" \
     | sed -n 's/.*"tag_name" *: *"\([^"]*\)".*/\\1/p' | head -1)"
-  [ -n "$VERSION" ] || die "could not find a release. Set QUAI_VERSION to install a specific tag."
+  [ -n "$VERSION" ] || die "could not find a published release. Set QUAI_VERSION to install a specific tag."
 fi
 
-URL="https://github.com/${REPO}/releases/download/${VERSION}/${TARGET}"
+# Refuse anything that is not a tag, so a branch name cannot slip through.
+case "$VERSION" in
+  v*) ;;
+  *) die "expected a release tag such as v0.1.0, got '$VERSION'" ;;
+esac
+
+ASSETS="${BASE}/${REPO}/releases/download/${VERSION}"
 
 # --- download -------------------------------------------------------------
 
@@ -53,13 +66,12 @@ echo "Installing quai ${VERSION} (${TARGET})"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
-curl -fSL --progress-bar "$URL" -o "$TMP/quai" \
-  || die "could not download $URL — check that ${VERSION} has a ${TARGET} build"
+curl -fSL --progress-bar "${ASSETS}/${TARGET}" -o "$TMP/quai" \
+  || die "could not download ${TARGET} for ${VERSION} — check that this release has a build for your machine"
 
-# Verify against the published checksums when they exist, so a truncated or
-# tampered download is caught before it lands on the PATH.
-if curl -fsSL "https://github.com/${REPO}/releases/download/${VERSION}/checksums.txt" \
-     -o "$TMP/checksums.txt" 2>/dev/null; then
+# Verify against the published checksums, so a truncated or tampered download
+# is caught before it lands on the PATH.
+if curl -fsSL "${ASSETS}/checksums.txt" -o "$TMP/checksums.txt" 2>/dev/null; then
   expected="$(sed -n "s/^\([0-9a-f]*\)  *${TARGET}$/\1/p" "$TMP/checksums.txt")"
   if [ -n "$expected" ]; then
     if command -v sha256sum >/dev/null 2>&1; then
@@ -76,7 +88,14 @@ fi
 
 mkdir -p "$INSTALL_DIR"
 chmod +x "$TMP/quai"
+
+# The old binary is moved aside rather than overwritten: on some systems a
+# running program cannot have its file replaced underneath it.
+if [ -e "$INSTALL_DIR/quai" ]; then
+  mv -f "$INSTALL_DIR/quai" "$INSTALL_DIR/quai.old" 2>/dev/null || true
+fi
 mv "$TMP/quai" "$INSTALL_DIR/quai"
+rm -f "$INSTALL_DIR/quai.old" 2>/dev/null || true
 
 echo "Installed to $INSTALL_DIR/quai"
 
@@ -90,4 +109,5 @@ case ":$PATH:" in
 esac
 
 echo
-echo "Next: quai login <user@host> quai.<your-domain>"
+echo "Next:    quai login <user@host> quai.<your-domain>"
+echo "Later:   quai update      quai uninstall"

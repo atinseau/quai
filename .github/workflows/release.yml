@@ -86,7 +86,12 @@ jobs:
         # Compiled rather than shipped as source: the developer installing the
         # CLI should not have to install a runtime first.
         run: |
-          bun build --compile --minify \
+          # The tag is baked in so 'quai update' can tell whether it is
+          # already current instead of downloading blindly.
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "Building quai $VERSION for ${{ matrix.target }}"
+          QUAI_BUILD_VERSION="$VERSION" bun build --compile --minify \
+            --define "process.env.QUAI_BUILD_VERSION='$VERSION'" \
             --outfile "quai-${{ matrix.target }}" \
             src/cli/main.ts
 
@@ -116,10 +121,17 @@ jobs:
           sha256sum quai-* > checksums.txt
           cat checksums.txt
 
+      - name: Publish the installer alongside the binaries
+        # Shipping install.sh as a release asset is what lets the documented
+        # URL point at a tag instead of a branch: a branch would hand out
+        # whatever was merged last, which is not a release anyone tested.
+        run: cp install.sh artifacts/install.sh
+
       - uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
           files: |
             artifacts/quai-*
             artifacts/checksums.txt
+            artifacts/install.sh
 
