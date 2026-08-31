@@ -180,6 +180,12 @@ never out of step.
 
     git tag v0.1.0 && git push origin v0.1.0
 
+Publishing the types package needs an `NPM_TOKEN` on the `production`
+environment, and it has to be a granular access token with *bypass 2FA*
+enabled — an account with two-factor publishing rejects a classic token. The
+job is skipped rather than failed when the token is absent, so the image and
+the CLI ship either way.
+
 ## Development
 
     bun run check                         # lint, format, types and unit tests

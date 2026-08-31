@@ -159,6 +159,10 @@ jobs:
         # Skipped rather than failed when no token is configured: the types are
         # a convenience, and a missing npm credential should not stop the image
         # and the CLI — the things an operator actually needs — from shipping.
+        #
+        # The token must be a granular access token with 'bypass 2FA' enabled.
+        # An account with two-factor publishing turned on rejects a classic
+        # token with a 403 that names neither the account nor the setting.
         run: |
           if [ -z "${NODE_AUTH_TOKEN}" ]; then
             echo "::warning::NPM_TOKEN is not set; skipping the types package."
