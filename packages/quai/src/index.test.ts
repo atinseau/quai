@@ -81,3 +81,26 @@ describe("the package stands alone", () => {
     expect(typeof handler).toBe("function");
   });
 });
+
+describe("the natural way of writing a handler compiles", () => {
+  test("an arrow function ending in res.end() is accepted", () => {
+    // Returning what end() gives back is the most natural shape; rejecting it
+    // made the README example fail to compile against the published package.
+    const handler = defineHandler((request, response) => response.end(String(request.url)));
+    expect(typeof handler).toBe("function");
+  });
+
+  test("a handler returning nothing is still accepted", () => {
+    const handler = defineHandler((_request, response) => {
+      response.end("hi");
+    });
+    expect(typeof handler).toBe("function");
+  });
+
+  test("an async handler is accepted", () => {
+    const handler = defineHandler(async (_request, response) => {
+      response.end("hi");
+    });
+    expect(typeof handler).toBe("function");
+  });
+});

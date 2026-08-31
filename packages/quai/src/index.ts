@@ -28,6 +28,15 @@ export type QuaiResponse = {
   write(chunk: string | Uint8Array): unknown;
 };
 
+/**
+ * What a handler may return.
+ *
+ * Anything, and it is ignored: writing `res.end(...)` as the last expression
+ * of an arrow function returns whatever end() gives back, and rejecting that
+ * would fail the most natural way to write a handler.
+ */
+type HandlerResult = unknown;
+
 // --- functions ------------------------------------------------------------
 
 /**
@@ -36,7 +45,7 @@ export type QuaiResponse = {
  * Quai supplies the server; the handler decides what a request produces. It
  * may be exported as `default` or as `handler`.
  */
-export type QuaiHandler = (request: QuaiRequest, response: QuaiResponse) => void | Promise<void>;
+export type QuaiHandler = (request: QuaiRequest, response: QuaiResponse) => HandlerResult;
 
 /** A Bun function, written against the platform's fetch-style handler. */
 export type QuaiBunHandler = (request: Request) => Response | Promise<Response>;
