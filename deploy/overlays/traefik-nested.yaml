@@ -1,0 +1,28 @@
+# The same overlay, for a nested deployment.
+#
+#   docker compose -f deploy/nested/compose.yaml \
+#     -f deploy/overlays/traefik-nested.yaml up -d
+#
+# Identical to traefik.yaml except for the service it attaches to: a nested
+# instance runs Quai inside its own Docker daemon, so the container the proxy
+# reaches is the wrapper. Everything said there about the wildcard certificate
+# and the DNS challenge applies here unchanged.
+
+services:
+  quai-host:
+    networks:
+      - proxy
+
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.quai.rule=HostRegexp(`^.+\.${QUAI_ZONE:-quai.localhost}$$`)
+      - traefik.http.routers.quai.entrypoints=${QUAI_ENTRYPOINT:-https}
+      - traefik.http.routers.quai.tls=true
+      - traefik.http.routers.quai.tls.domains[0].main=${QUAI_ZONE:-quai.localhost}
+      - traefik.http.routers.quai.tls.domains[0].sans=*.${QUAI_ZONE:-quai.localhost}
+      - traefik.http.services.quai.loadbalancer.server.port=8080
+
+networks:
+  proxy:
+    external: true
+    name: ${QUAI_PROXY_NETWORK:-proxy}

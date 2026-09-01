@@ -1,0 +1,63 @@
+# Quai behind a Traefik proxy.
+#
+# An overlay, not a replacement: Docker Compose merges files given with
+# repeated -f flags, so the base file stays plain Docker and everything a
+# particular proxy needs lives here.
+#
+#   docker compose -f deploy/compose.yaml -f deploy/overlays/traefik.yaml up -d
+#
+# For a nested deployment, swap the first file for deploy/nested/compose.yaml
+# and the service name below for 'quai-host'.
+#
+# BEFORE THIS WORKS: a wildcard certificate for *.<zone> must already exist.
+# Quai serves a subdomain per project, and a router matching a pattern gives
+# Traefik no concrete hostname to request a certificate for — so it cannot
+# issue one on demand. The certificate has to come from a DNS challenge,
+# configured on the proxy, before the first project is deployed. Routing will
+# work immediately; HTTPS will not, until that is in place.
+#
+# Note that a wildcard covers exactly one level: *.quai.example.com matches
+# my-site.quai.example.com and not a.b.quai.example.com. Quai's router refuses
+# nested subdomains for the same reason, so the two agree.
+
+services:
+  quai:
+    # The proxy reaches Quai over the Docker network, so publishing the HTTP
+    # port on the host would only add a way in that bypasses the proxy.
+    # Compose has no syntax for removing a published port, so the base file
+    # publishes none: this is a reminder, not a removal.
+    networks:
+      - proxy
+
+    labels:
+      - traefik.enable=true
+
+      # One router for every project, present and future. A rule naming each
+      # project would have to be rewritten on every deploy, which is exactly
+      # what Quai exists to avoid.
+      # The trailing $ is doubled: Compose reads a single one as the start of a
+      # variable. The container receives one, which anchors the pattern — an
+      # unanchored rule would match any host merely ending in the zone.
+      #
+      # The zone's own dots are not escaped, so a regex dot matches any
+      # character there. Traefik has already narrowed the request to hosts
+      # pointed at this proxy, so the risk is a neighbouring domain of yours
+      # differing by one character — not an arbitrary host on the internet.
+      - traefik.http.routers.quai.rule=HostRegexp(`^.+\.${QUAI_ZONE:-quai.localhost}$$`)
+      - traefik.http.routers.quai.entrypoints=${QUAI_ENTRYPOINT:-https}
+      - traefik.http.routers.quai.tls=true
+
+      # Named explicitly because a pattern-matching router cannot derive them.
+      - traefik.http.routers.quai.tls.domains[0].main=${QUAI_ZONE:-quai.localhost}
+      - traefik.http.routers.quai.tls.domains[0].sans=*.${QUAI_ZONE:-quai.localhost}
+
+      # Quai routes on the Host header, which Traefik forwards unchanged.
+      - traefik.http.services.quai.loadbalancer.server.port=8080
+
+networks:
+  proxy:
+    # The network the proxy already runs on, named rather than created: it
+    # belongs to the proxy, not to Quai. Set QUAI_PROXY_NETWORK to whatever
+    # yours is called.
+    external: true
+    name: ${QUAI_PROXY_NETWORK:-proxy}

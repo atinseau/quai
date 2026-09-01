@@ -8,6 +8,29 @@ There are two ways to give it those things. **If the machine already runs
 something you care about, use the [nested deployment](#nested-deployment)** —
 it asks the host for one container and nothing else.
 
+## Before you start: DNS and a wildcard certificate
+
+Quai serves one subdomain per project, so two things must exist before the
+first deploy — neither of them provided by Quai, and both easy to discover at
+the wrong moment.
+
+**A wildcard DNS record.** `*.quai.<your-domain>` pointing at the host.
+
+**A wildcard TLS certificate**, `*.quai.<your-domain>`, obtained through a
+**DNS challenge**. This is the part that surprises people: a proxy route that
+matches a pattern rather than a fixed hostname has no concrete name to request
+a certificate for, so it cannot issue one on demand. The usual HTTP challenge
+cannot produce a wildcard at all.
+
+Get this wrong and routing works on the first try while HTTPS fails for every
+project — a confusing symptom, since plain HTTP looks fine.
+
+Set it up once, on the proxy, and every project deployed afterwards is covered
+without touching it again. Note that a wildcard covers exactly one level:
+`*.quai.example.com` matches `my-site.quai.example.com` and not
+`a.b.quai.example.com`. Quai's router refuses nested subdomains for the same
+reason, so the two rules agree.
+
 ## What the host must provide
 
 **An XFS volume with project quotas.** This is the only mechanism that stops
@@ -41,6 +64,49 @@ single wildcard certificate covers every project.
 
 On a PaaS that accepts raw Compose (Coolify, Dokploy, CapRover), paste the same
 file and set `QUAI_ZONE` as an environment variable.
+
+## Putting a proxy in front
+
+Quai speaks plain HTTP on one port and decides which project answers from the
+`Host` header. Any proxy that forwards that header unchanged will do.
+
+**That last part is the whole contract.** A proxy that rewrites `Host` sends
+every project to the same place, and the failure looks like an ordinary 404
+with nothing to suggest the proxy is responsible. Traefik and Caddy forward it
+by default; nginx does not.
+
+For Traefik, an overlay is provided. Compose merges files given with repeated
+`-f` flags, so the base file stays plain Docker:
+
+    QUAI_ZONE=quai.example.com QUAI_PROXY_NETWORK=my-proxy-net \
+      docker compose -f deploy/compose.yaml \
+                     -f deploy/overlays/traefik.yaml up -d
+
+For a nested instance, use `deploy/nested/compose.yaml` with
+`deploy/overlays/traefik-nested.yaml`. Both overlays declare one router that
+matches every subdomain of the zone, so a newly deployed project is routed
+without touching the proxy — which is verified against a real Traefik in CI.
+
+With **Caddy**, one site block is enough; `Host` is preserved by default:
+
+    *.quai.example.com {
+      tls { dns <your-provider> }   # a wildcard needs the DNS challenge
+      reverse_proxy quai:8080
+    }
+
+With **nginx**, the header must be set explicitly. Without `proxy_set_header
+Host`, nginx sends the upstream name instead and no project is ever found:
+
+    server {
+      server_name *.quai.example.com;
+      location / {
+        proxy_pass http://quai:8080;
+        proxy_set_header Host $host;   # without this, nothing routes
+      }
+    }
+
+Only the Traefik overlay ships as a file, because it is the only one verified
+against a running instance. The other two are starting points.
 
 Then add a deploy key. Every key is pinned to a forced command, so it can
 deploy and administer projects and nothing else — no shell is ever granted:

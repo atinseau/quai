@@ -51,6 +51,8 @@ the wrong thing.
   the Compose file, and how to check it works
   — including a [nested deployment](docs/deploying.md#nested-deployment) that
   asks a shared machine for one container and nothing else
+  — and [putting a proxy in front](docs/deploying.md#putting-a-proxy-in-front),
+  with a ready-made Traefik overlay
 - **[Operating an instance](docs/operating.md)** — crashes, logs, backups,
   limits
 
