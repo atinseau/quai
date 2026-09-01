@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { localRunPlan, localStaticFile } from "./dev";
+import { devDirectory, localPort, localRunPlan, localStaticFile } from "./dev";
 
 describe("running a project locally", () => {
   test("a function is served by the same host the server uses", () => {
@@ -112,5 +112,41 @@ describe("serving a static folder locally", () => {
 
   test("a malformed percent-encoding is refused rather than throwing", () => {
     expect(localStaticFile(ROOT, "/%")).toBeNull();
+  });
+});
+
+// The configuration is the source of truth, so a declared port is the port
+// that serves. Anything else would mean 'quai dev' verifies something other
+// than what the developer wrote.
+describe("which port serves", () => {
+  test("a service is served on the port it declares", () => {
+    expect(localPort({ type: "service", start: "node server.js", internalPort: 8080 })).toBe(8080);
+  });
+
+  test("an explicit --port wins, so several projects can run at once", () => {
+    expect(localPort({ type: "service", start: "node server.js", internalPort: 8080 }, 4321)).toBe(
+      4321,
+    );
+  });
+
+  test("a project that declares nothing falls back to a documented default", () => {
+    expect(localPort({ type: "static" })).toBe(3000);
+  });
+});
+
+describe("which directory is run", () => {
+  test("a directory is used whether or not a port flag follows it", () => {
+    // Without the flag there is no index to skip, and skipping one anyway
+    // silently dropped the directory and ran the current one instead.
+    expect(devDirectory(["/work/app"])).toBe("/work/app");
+    expect(devDirectory(["/work/app", "--port", "4321"])).toBe("/work/app");
+  });
+
+  test("the port value is not mistaken for a directory", () => {
+    expect(devDirectory(["--port", "4321"])).toBeUndefined();
+  });
+
+  test("no argument means the current directory", () => {
+    expect(devDirectory([])).toBeUndefined();
   });
 });

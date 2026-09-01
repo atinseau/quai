@@ -13,7 +13,7 @@ import { collectFiles } from "./collect";
 import { formatEnvFile, isReservedEnvKey, parseEnvAssignment } from "./env";
 import { configPath, readConfig, writeConfig } from "./config";
 import { configFileIn, loadProjectConfig } from "./config-file";
-import { localRunPlan, localStaticFile } from "./dev";
+import { devDirectory, localPort, localRunPlan, localStaticFile } from "./dev";
 import { renderQuaiToml } from "./init";
 import { latestReleaseUrl, releaseAssetUrl, targetTriple } from "./release";
 import { replaceRunningBinary, uninstallPlan } from "./self-update";
@@ -423,19 +423,50 @@ async function uninstallCommand(args: string[]): Promise<void> {
  * answers here answers there — the point being to find a mistake before a
  * deploy rather than after one.
  */
+/**
+ * Whether something already listens on a port.
+ *
+ * Asked by binding it: every other signal is a guess about what the operating
+ * system will allow this process, at this moment, on this interface.
+ *
+ * Bound on 0.0.0.0 rather than the default host. A project listening on all
+ * IPv4 interfaces — what a Node server does by default — leaves the IPv6
+ * loopback free, so probing 'localhost' succeeds and the port looks available
+ * right up until the project itself fails to bind.
+ */
+async function portIsTaken(port: number): Promise<boolean> {
+  try {
+    const probe = Bun.serve({ port, hostname: "0.0.0.0", fetch: () => new Response("") });
+    await probe.stop(true);
+    return false;
+  } catch {
+    return true;
+  }
+}
+
 async function devCommand(args: string[]): Promise<void> {
   const flagIndex = args.findIndex((argument) => argument === "--port" || argument === "-p");
-  const port = flagIndex === -1 ? 3000 : Number(args[flagIndex + 1] ?? 3000);
-  const directory = args.find(
-    (argument, index) => !argument.startsWith("-") && index !== flagIndex + 1,
-  );
-  const root = resolve(directory ?? process.cwd());
+  const override = flagIndex === -1 ? undefined : Number(args[flagIndex + 1]);
+  if (override !== undefined && !Number.isInteger(override)) fail("--port needs a number");
+  const root = resolve(devDirectory(args) ?? process.cwd());
 
   let spec: DeploySpec;
   try {
     spec = resolveDeploySpec(new Set(await readdir(root)), await readManifest(root));
   } catch (error) {
     fail(error instanceof Error ? error.message : String(error));
+  }
+
+  const port = localPort(spec, override);
+
+  // Checked before anything is built or started: a busy port stops the run, it
+  // never slides onto a free one. Serving somewhere other than where the
+  // manifest says would verify a configuration nobody wrote.
+  if (await portIsTaken(port)) {
+    fail(
+      `port ${port} is already in use. Free it, or pass --port <n> to serve ` +
+        "this project somewhere else.",
+    );
   }
 
   if (spec.build?.command) await runBuild(root, spec.build.command);

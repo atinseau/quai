@@ -10,6 +10,35 @@ import { join } from "node:path";
 import type { DeploySpec } from "./manifest";
 import { contentTypeFor, resolveStaticFile } from "../supervisor/static";
 
+/**
+ * The directory a dev run targets, or undefined for the current one.
+ *
+ * The value after a port flag is not a directory. When no flag is present
+ * there is no such value to skip — and skipping one regardless used to drop
+ * the directory itself, running the current one in silence.
+ */
+export function devDirectory(args: string[]): string | undefined {
+  const flagIndex = args.findIndex((argument) => argument === "--port" || argument === "-p");
+  return args.find(
+    (argument, index) => !argument.startsWith("-") && (flagIndex === -1 || index !== flagIndex + 1),
+  );
+}
+
+/** Where a project is served when it declares nothing. */
+export const DEFAULT_LOCAL_PORT = 3000;
+
+/**
+ * The port a project is served on locally.
+ *
+ * A service declaring an internal port gets that port: on the server it owns a
+ * network namespace and listens there, so serving it anywhere else locally
+ * would test a configuration nobody wrote. An explicit override still wins,
+ * which is how two projects run side by side on one machine.
+ */
+export function localPort(spec: DeploySpec, override?: number): number {
+  return override ?? spec.internalPort ?? DEFAULT_LOCAL_PORT;
+}
+
 /** A file to serve, resolved the way the deployed project would resolve it. */
 export type LocalStaticFile = { path: string; contentType: string };
 
