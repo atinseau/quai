@@ -10,6 +10,16 @@
 
 services:
   quai-host:
+    # Emptied deliberately. The base file publishes the HTTP port so a bare
+    # 'docker compose up' is reachable; behind a proxy that same port is a way
+    # in that goes around it. '!override' replaces the inherited list instead
+    # of merging with it, which is the only way Compose can take a port away.
+    #
+    # The deploy channel stays published: the CLI reaches it over SSH, not
+    # through the proxy.
+    ports: !override
+      - "${QUAI_SSH_PORT:-2222}:22"
+
     networks:
       - proxy
 

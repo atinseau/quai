@@ -7,6 +7,7 @@ import {
   localStaticFile,
   startupSummary,
 } from "./dev";
+import { resolveStaticFile } from "../supervisor/static";
 
 describe("running a project locally", () => {
   test("a function is served by the same host the server uses", () => {
@@ -119,6 +120,32 @@ describe("serving a static folder locally", () => {
 
   test("a malformed percent-encoding is refused rather than throwing", () => {
     expect(localStaticFile(ROOT, "/%")).toBeNull();
+  });
+
+  // The point of the ticket, stated as a test: the same request must have the
+  // same outcome whether it is answered locally or after a deploy. Checking
+  // each side against a literal would let both drift together.
+  test("every request resolves the same way locally as it does on the server", () => {
+    const requests = [
+      "/",
+      "/index.html",
+      "/assets/app.js",
+      "/docs/",
+      "/app.js?v=2",
+      "/my%20file.txt",
+      "/../../etc/passwd",
+      "/%2e%2e/%2e%2e/etc/passwd",
+      "/..\\..\\etc/passwd",
+      "/%",
+      "/index.html\u0000.txt",
+    ];
+
+    for (const request of requests) {
+      expect({ request, path: localStaticFile(ROOT, request)?.path ?? null }).toEqual({
+        request,
+        path: resolveStaticFile(ROOT, request),
+      });
+    }
   });
 });
 

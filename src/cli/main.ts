@@ -424,24 +424,6 @@ async function uninstallCommand(args: string[]): Promise<void> {
 }
 
 /**
- * Runs the project locally, the way the server would.
- *
- * A function is served by the same host the supervisor uses, so a handler that
- * answers here answers there — the point being to find a mistake before a
- * deploy rather than after one.
- */
-/**
- * Whether something already listens on a port.
- *
- * Asked by binding it: every other signal is a guess about what the operating
- * system will allow this process, at this moment, on this interface.
- *
- * Bound on 0.0.0.0 rather than the default host. A project listening on all
- * IPv4 interfaces — what a Node server does by default — leaves the IPv6
- * loopback free, so probing 'localhost' succeeds and the port looks available
- * right up until the project itself fails to bind.
- */
-/**
  * The interpreter's own version, asked of the interpreter.
  *
  * Reporting a version the CLI assumed rather than observed would defeat the
@@ -471,6 +453,17 @@ async function runtimeVersion(runtime: string | undefined): Promise<string | nul
   }
 }
 
+/**
+ * Whether something already listens on a port.
+ *
+ * Asked by binding it: every other signal is a guess about what the operating
+ * system will allow this process, at this moment, on this interface.
+ *
+ * Bound on 0.0.0.0 rather than the default host. A project listening on all
+ * IPv4 interfaces — what a Node server does by default — leaves the IPv6
+ * loopback free, so probing 'localhost' succeeds and the port looks available
+ * right up until the project itself fails to bind.
+ */
 async function portIsTaken(port: number): Promise<boolean> {
   try {
     const probe = Bun.serve({ port, hostname: "0.0.0.0", fetch: () => new Response("") });
@@ -481,6 +474,13 @@ async function portIsTaken(port: number): Promise<boolean> {
   }
 }
 
+/**
+ * Runs the project locally, the way the server would.
+ *
+ * A function is served by the same host the supervisor uses, so a handler that
+ * answers here answers there — the point being to find a mistake before a
+ * deploy rather than after one.
+ */
 async function devCommand(args: string[]): Promise<void> {
   const flagIndex = args.findIndex((argument) => argument === "--port" || argument === "-p");
   const override = flagIndex === -1 ? undefined : Number(args[flagIndex + 1]);
