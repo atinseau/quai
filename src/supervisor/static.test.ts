@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { resolveStaticFile } from "./static";
+import { contentTypeFor, resolveStaticFile } from "./static";
 
 const ROOT = "/srv/quai/sites/my-site";
 
@@ -47,5 +47,43 @@ describe("static file resolution", () => {
 
   test("a null byte in the path is rejected", () => {
     expect(resolveStaticFile(ROOT, "/index.html\u0000.txt")).toBeNull();
+  });
+});
+
+describe("how a file is served", () => {
+  test("a page is served as html, so a browser renders it", () => {
+    expect(contentTypeFor("/index.html")).toBe("text/html; charset=utf-8");
+  });
+
+  test("a stylesheet and a script get the types a browser requires", () => {
+    // A browser refuses a stylesheet or a module served as anything else.
+    expect(contentTypeFor("/app.css")).toBe("text/css; charset=utf-8");
+    expect(contentTypeFor("/app.js")).toBe("text/javascript; charset=utf-8");
+  });
+
+  test("text formats declare utf-8, so accents survive the trip", () => {
+    expect(contentTypeFor("/data.json")).toContain("charset=utf-8");
+    expect(contentTypeFor("/notes.txt")).toContain("charset=utf-8");
+  });
+
+  test("a font is typed, so a browser does not refuse to load it", () => {
+    expect(contentTypeFor("/inter.woff2")).toBe("font/woff2");
+  });
+
+  test("the extension is read regardless of case", () => {
+    expect(contentTypeFor("/PHOTO.PNG")).toBe("image/png");
+  });
+
+  test("only the last extension counts", () => {
+    expect(contentTypeFor("/archive.tar.gz")).toBe("application/octet-stream");
+    expect(contentTypeFor("/app.min.js")).toBe("text/javascript; charset=utf-8");
+  });
+
+  test("an unknown extension is an opaque download rather than a guess", () => {
+    expect(contentTypeFor("/report.xyz")).toBe("application/octet-stream");
+  });
+
+  test("a file with no extension is not mistaken for one", () => {
+    expect(contentTypeFor("/LICENSE")).toBe("application/octet-stream");
   });
 });

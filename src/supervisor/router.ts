@@ -9,7 +9,7 @@
 
 import type { HealthReport } from "./health";
 import { projectFor } from "./naming";
-import { resolveStaticFile } from "./static";
+import { contentTypeFor, resolveStaticFile } from "./static";
 
 export type ProjectRecord = {
   name: string;
@@ -34,27 +34,6 @@ export type RouterContext = {
   projectForDomain?: (domain: string) => string | null;
   proxy: (request: Request, target: ProxyTarget) => Promise<Response>;
 };
-
-const CONTENT_TYPES: Record<string, string> = {
-  html: "text/html; charset=utf-8",
-  css: "text/css; charset=utf-8",
-  js: "text/javascript; charset=utf-8",
-  json: "application/json; charset=utf-8",
-  svg: "image/svg+xml",
-  png: "image/png",
-  jpg: "image/jpeg",
-  jpeg: "image/jpeg",
-  gif: "image/gif",
-  webp: "image/webp",
-  ico: "image/x-icon",
-  woff2: "font/woff2",
-  txt: "text/plain; charset=utf-8",
-};
-
-function contentTypeFor(path: string): string {
-  const extension = path.split(".").pop()?.toLowerCase() ?? "";
-  return CONTENT_TYPES[extension] ?? "application/octet-stream";
-}
 
 const notFound = () => new Response("Not found", { status: 404 });
 
