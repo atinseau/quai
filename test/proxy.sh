@@ -27,6 +27,18 @@ sect() { echo; echo "== $1"; }
 
 WORK="$(mktemp -d)"
 
+# Registries fail transiently, and a 500 from Docker Hub says nothing about
+# whether Quai routes correctly. Pulled up front, with retries, so a network
+# hiccup does not read as a routing regression.
+pull() {
+  for _ in 1 2 3; do
+    docker pull "$1" >/dev/null 2>&1 && return 0
+    sleep 5
+  done
+  echo "could not pull $1"
+  return 1
+}
+
 cleanup() {
   docker rm -f "$PROXY" "$QUAI" >/dev/null 2>&1
   docker volume rm "$VOLUME" >/dev/null 2>&1
@@ -37,6 +49,7 @@ trap cleanup EXIT
 # --- a Quai instance, reachable only through the proxy --------------------
 sect "starting Quai behind Traefik"
 cleanup
+pull traefik:v3.6 || exit 1
 docker network create "$NETWORK" >/dev/null
 docker volume create "$VOLUME" >/dev/null
 
