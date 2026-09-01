@@ -30,9 +30,17 @@ cgroup delegation, and names what to change when something is missing.
 
 ## Deploying it
 
-Paste [deploy/compose.yaml](../deploy/compose.yaml) into Coolify as a Raw
-Compose deployment. Point `*.quai.<your-domain>` at the service; Coolify
-terminates TLS with a single wildcard certificate for every project.
+[deploy/compose.yaml](../deploy/compose.yaml) is an ordinary Compose file:
+
+    QUAI_ZONE=quai.example.com docker compose -f deploy/compose.yaml up -d
+
+Point `*.quai.<your-domain>` at the service. Quai serves plain HTTP on one
+port and routes by `Host` header, so TLS belongs to whatever already sits in
+front — Caddy, Traefik, nginx, or a PaaS that manages certificates for you. A
+single wildcard certificate covers every project.
+
+On a PaaS that accepts raw Compose (Coolify, Dokploy, CapRover), paste the same
+file and set `QUAI_ZONE` as an environment variable.
 
 Then add a deploy key. Every key is pinned to a forced command, so it can
 deploy and administer projects and nothing else — no shell is ever granted:

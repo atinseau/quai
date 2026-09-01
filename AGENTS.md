@@ -1,8 +1,9 @@
 # Quai
 
-PaaS mono-conteneur déployable dans Coolify : pousser un dossier statique, une
-fonction ou un service persistant en une commande, chaque projet isolé dans son
-compte UNIX, son namespace réseau, son cgroup et son quota disque.
+PaaS mono-conteneur, déployable partout où tourne Docker : pousser un dossier
+statique, une fonction ou un service persistant en une commande, chaque projet
+isolé dans son compte UNIX, son namespace réseau, son cgroup et son quota
+disque. Coolify est un hôte parmi d'autres, jamais une dépendance.
 
 ## Agent skills
 

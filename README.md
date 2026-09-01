@@ -2,9 +2,10 @@
 
 Push a folder, get a URL.
 
-Quai is a single container you deploy in Coolify that hosts small projects — a
-static site, an HTTP function, a long-running service — without creating a
-project, a repository and a Docker image for each one.
+Quai is a single container that hosts small projects — a static site, an HTTP
+function, a long-running service — without creating a project, a repository and
+a Docker image for each one. It runs anywhere Docker does: a bare VPS, a
+Compose file, or a PaaS such as Coolify, Dokploy or CapRover.
 
 Unlike hosted platforms, a service that calls `app.listen(8080)` runs
 unchanged: every project gets its own network stack, so its 8080 is nobody

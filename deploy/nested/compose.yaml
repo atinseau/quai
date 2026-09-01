@@ -1,4 +1,4 @@
-# Quai in a nested Docker — paste this into Coolify as a Raw Compose deployment.
+# Quai in a nested Docker — a plain Compose file, for any host that runs Docker.
 #
 # Use this instead of deploy/compose.yaml when the host already runs something
 # you care about. Quai needs a shared cgroup namespace, NET_ADMIN, SYS_ADMIN
@@ -39,7 +39,7 @@ services:
       DOCKER_TLS_CERTDIR: ""
       QUAI_IMAGE: ${QUAI_IMAGE:-ghcr.io/atinseau/quai:latest}
       # The wildcard zone projects are served under. Point *.quai.<domain> at
-      # this service; Coolify terminates TLS with one wildcard certificate.
+      # this service and terminate TLS in front of it.
       QUAI_ZONE: ${QUAI_ZONE:-quai.localhost}
       # GiB reserved for project homes, allocated up front.
       QUAI_HOMES_SIZE: ${QUAI_HOMES_SIZE:-8}

@@ -1,4 +1,7 @@
-# Quai — paste this into Coolify as a Raw Compose deployment.
+# Quai — a plain Compose file, for any host that runs Docker.
+#
+# 'docker compose up -d' is all it takes. A PaaS that accepts raw Compose —
+# Coolify, Dokploy, CapRover — takes the same file pasted in.
 #
 # The settings below are not optional. The prototype established that without
 # 'cgroup: host' a memory cap is written without error and contains nothing,
@@ -52,8 +55,8 @@ services:
       QUAI_STATE: /srv/quai/state
       QUAI_PORT: "8080"
       # The wildcard zone projects are served under. Point *.quai.<domain> at
-      # this service in Coolify, which terminates TLS with one wildcard
-      # certificate for every project.
+      # this service and terminate TLS in front of it — one wildcard
+      # certificate covers every project.
       QUAI_ZONE: ${QUAI_ZONE:-quai.localhost}
 
     healthcheck:
@@ -65,4 +68,3 @@ services:
 
 volumes:
   quai-state:
-
