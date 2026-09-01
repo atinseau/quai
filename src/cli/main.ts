@@ -13,7 +13,7 @@ import { collectFiles } from "./collect";
 import { formatEnvFile, isReservedEnvKey, parseEnvAssignment } from "./env";
 import { configPath, readConfig, writeConfig } from "./config";
 import { configFileIn, loadProjectConfig } from "./config-file";
-import { localRunPlan } from "./dev";
+import { localRunPlan, localStaticFile } from "./dev";
 import { renderQuaiToml } from "./init";
 import { latestReleaseUrl, releaseAssetUrl, targetTriple } from "./release";
 import { replaceRunningBinary, uninstallPlan } from "./self-update";
@@ -447,12 +447,12 @@ async function devCommand(args: string[]): Promise<void> {
     Bun.serve({
       port,
       async fetch(request) {
-        const path = new URL(request.url).pathname;
-        const file = Bun.file(
-          join(directoryToServe, path.endsWith("/") ? path + "index.html" : path),
-        );
+        const resolved = localStaticFile(directoryToServe, new URL(request.url).pathname);
+        if (resolved === null) return new Response("Not found", { status: 404 });
+
+        const file = Bun.file(resolved.path);
         return (await file.exists())
-          ? new Response(file)
+          ? new Response(file, { headers: { "content-type": resolved.contentType } })
           : new Response("Not found", { status: 404 });
       },
     });

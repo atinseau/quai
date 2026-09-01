@@ -8,6 +8,25 @@
 
 import { join } from "node:path";
 import type { DeploySpec } from "./manifest";
+import { contentTypeFor, resolveStaticFile } from "../supervisor/static";
+
+/** A file to serve, resolved the way the deployed project would resolve it. */
+export type LocalStaticFile = { path: string; contentType: string };
+
+/**
+ * Resolves a request against a local static folder.
+ *
+ * Delegates to the supervisor's own resolution rather than reimplementing it:
+ * a second implementation would drift, and the drift would only show up after
+ * a deploy — the one moment 'quai dev' is meant to make uneventful.
+ *
+ * @returns null when the request cannot be served, which the caller answers
+ * with a 404 rather than explaining why.
+ */
+export function localStaticFile(root: string, requestPath: string): LocalStaticFile | null {
+  const path = resolveStaticFile(root, requestPath);
+  return path === null ? null : { path, contentType: contentTypeFor(path) };
+}
 
 /** Where the hosts live relative to this file, in a checkout or a build. */
 const HOSTS: Record<string, string> = {

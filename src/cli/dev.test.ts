@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { localRunPlan } from "./dev";
+import { localRunPlan, localStaticFile } from "./dev";
 
 describe("running a project locally", () => {
   test("a function is served by the same host the server uses", () => {
@@ -89,5 +89,28 @@ describe("running a project locally", () => {
       { root: "/work/app", port: 3000 },
     );
     expect(plan.cwd).toBe("/work/app");
+  });
+});
+
+// A folder served locally must answer exactly as it will once deployed:
+// anything else lets a path work on a laptop and fail in production, which is
+// the one thing 'quai dev' exists to rule out.
+describe("serving a static folder locally", () => {
+  const ROOT = "/work/app/dist";
+
+  test("the root path serves the index, as it does on the server", () => {
+    expect(localStaticFile(ROOT, "/")?.path).toBe(ROOT + "/index.html");
+  });
+
+  test("a file is served with the type the server would send", () => {
+    expect(localStaticFile(ROOT, "/app.js")?.contentType).toBe("text/javascript; charset=utf-8");
+  });
+
+  test("a traversal is refused locally, as it is on the server", () => {
+    expect(localStaticFile(ROOT, "/../../etc/passwd")).toBeNull();
+  });
+
+  test("a malformed percent-encoding is refused rather than throwing", () => {
+    expect(localStaticFile(ROOT, "/%")).toBeNull();
   });
 });
