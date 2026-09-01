@@ -1,5 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { devDirectory, localEnv, localPort, localRunPlan, localStaticFile } from "./dev";
+import {
+  devDirectory,
+  localEnv,
+  localPort,
+  localRunPlan,
+  localStaticFile,
+  startupSummary,
+} from "./dev";
 
 describe("running a project locally", () => {
   test("a function is served by the same host the server uses", () => {
@@ -171,5 +178,64 @@ describe("which environment a project runs with", () => {
     // would make the project answer somewhere nobody is looking.
     const env = localEnv({ PORT: "1111" }, { PORT: "2222" });
     expect(env.PORT).toBeUndefined();
+  });
+});
+
+// A developer should be able to read the first lines and confirm the manifest
+// was understood the way they meant.
+describe("what a dev run announces", () => {
+  const spec = {
+    type: "service" as const,
+    runtime: "node" as const,
+    start: "node server.js",
+    internalPort: 8080,
+  };
+
+  const summary = (overrides = {}) =>
+    startupSummary({
+      spec,
+      port: 8080,
+      root: "/work/app",
+      runtimeVersion: "v22.23.2",
+      variableCount: 3,
+      variableSources: ["quai.toml", ".env.local"],
+      serveStatic: null,
+      ...overrides,
+    }).join("\n");
+
+  test("it states the project type", () => {
+    expect(summary()).toContain("service");
+  });
+
+  test("it states the runtime and its version", () => {
+    expect(summary()).toContain("v22.23.2");
+  });
+
+  test("it states the command that will run", () => {
+    expect(summary()).toContain("node server.js");
+  });
+
+  test("it states where the project is reachable", () => {
+    expect(summary()).toContain("http://localhost:8080");
+  });
+
+  test("it states how many variables were loaded and where they came from", () => {
+    const text = summary();
+    expect(text).toContain("3");
+    expect(text).toContain(".env.local");
+  });
+
+  test("it names the served directory for a static project", () => {
+    expect(summary({ serveStatic: "/work/app/dist" })).toContain("/work/app/dist");
+  });
+
+  test("it names what running locally does not reproduce", () => {
+    // Claiming 'same as production' without naming the differences is how a
+    // developer gets caught out after deploying.
+    const text = summary().toLowerCase();
+    expect(text).toContain("not reproduced");
+    for (const guarantee of ["memory", "disk", "network", "syscall"]) {
+      expect(text).toContain(guarantee);
+    }
   });
 });

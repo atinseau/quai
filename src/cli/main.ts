@@ -13,7 +13,14 @@ import { collectFiles } from "./collect";
 import { formatEnvFile, isReservedEnvKey, parseEnvAssignment, parseEnvFile } from "./env";
 import { configPath, readConfig, writeConfig } from "./config";
 import { configFileIn, loadProjectConfig } from "./config-file";
-import { devDirectory, localPort, localRunPlan, localStaticFile } from "./dev";
+import {
+  devDirectory,
+  localEnv,
+  localPort,
+  localRunPlan,
+  localStaticFile,
+  startupSummary,
+} from "./dev";
 import { renderQuaiToml } from "./init";
 import { latestReleaseUrl, releaseAssetUrl, targetTriple } from "./release";
 import { replaceRunningBinary, uninstallPlan } from "./self-update";
@@ -434,6 +441,36 @@ async function uninstallCommand(args: string[]): Promise<void> {
  * loopback free, so probing 'localhost' succeeds and the port looks available
  * right up until the project itself fails to bind.
  */
+/**
+ * The interpreter's own version, asked of the interpreter.
+ *
+ * Reporting a version the CLI assumed rather than observed would defeat the
+ * point: a developer reads this line to learn what their code will run on.
+ */
+async function runtimeVersion(runtime: string | undefined): Promise<string | null> {
+  const interpreters: Record<string, string[]> = {
+    node: ["node", "--version"],
+    bun: ["bun", "--version"],
+    python: ["python3", "--version"],
+  };
+  const command = runtime === undefined ? undefined : interpreters[runtime];
+  if (command === undefined) return null;
+
+  try {
+    const proc = Bun.spawn(command, { stdout: "pipe", stderr: "pipe" });
+    const [out, err] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ]);
+    await proc.exited;
+    // Older Python reports its version on stderr.
+    const reported = (out.trim() || err.trim()).split("\n")[0] ?? "";
+    return reported.length === 0 ? null : reported;
+  } catch {
+    return null;
+  }
+}
+
 async function portIsTaken(port: number): Promise<boolean> {
   try {
     const probe = Bun.serve({ port, hostname: "0.0.0.0", fetch: () => new Response("") });
@@ -481,6 +518,24 @@ async function devCommand(args: string[]): Promise<void> {
 
   const plan = localRunPlan(spec, { root, port, localEnvFile });
 
+  const sources: string[] = [];
+  if (spec.env !== undefined && Object.keys(spec.env).length > 0) sources.push("the manifest");
+  if (Object.keys(localEnvFile).length > 0) sources.push(".env.local");
+
+  for (const line of startupSummary({
+    spec,
+    port,
+    root,
+    runtimeVersion: await runtimeVersion(spec.runtime),
+    // PORT and the function host's own variables are Quai's, not the
+    // developer's: counting them would overstate what the manifest declared.
+    variableCount: Object.keys(localEnv(spec.env, localEnvFile)).length,
+    variableSources: sources,
+    serveStatic: plan.serveStatic,
+  })) {
+    console.log(line);
+  }
+
   if (plan.serveStatic !== null) {
     const directoryToServe = plan.serveStatic;
     Bun.serve({
@@ -495,11 +550,8 @@ async function devCommand(args: string[]): Promise<void> {
           : new Response("Not found", { status: 404 });
       },
     });
-    console.log(`Serving ${directoryToServe} on http://localhost:${port}`);
     return;
   }
-
-  console.log(`Running ${spec.type} on http://localhost:${port} (ctrl-c to stop)`);
 
   const child = Bun.spawn(plan.command, {
     cwd: plan.cwd,

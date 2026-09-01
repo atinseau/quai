@@ -50,6 +50,64 @@ export function localEnv(
 }
 
 /**
+ * What running locally cannot give a project.
+ *
+ * Named rather than simulated: every one of these is enforced by the kernel
+ * around a deployed project, and none of it exists around a plain process on a
+ * laptop.
+ */
+const NOT_REPRODUCED = [
+  "memory and CPU caps",
+  "the process ceiling",
+  "the disk quota",
+  "network isolation",
+  "syscall confinement",
+];
+
+export type StartupFacts = {
+  spec: DeploySpec;
+  port: number;
+  root: string;
+  /** The interpreter's own version, or null when it could not be asked. */
+  runtimeVersion: string | null;
+  variableCount: number;
+  /** Which files contributed variables, in the order they were applied. */
+  variableSources: string[];
+  serveStatic: string | null;
+};
+
+/**
+ * The lines a dev run prints before it starts.
+ *
+ * Pure, so what a developer reads is verified without starting anything. It
+ * reports decisions rather than intentions: this is how the manifest was
+ * understood, and here is what local execution leaves out.
+ */
+export function startupSummary(facts: StartupFacts): string[] {
+  const lines = [`${facts.spec.type} on http://localhost:${facts.port}`];
+
+  if (facts.spec.runtime) {
+    lines.push(`  runtime    ${facts.spec.runtime} ${facts.runtimeVersion ?? "(version unknown)"}`);
+  }
+
+  if (facts.serveStatic !== null) {
+    lines.push(`  serving    ${facts.serveStatic}`);
+  } else if (facts.spec.start) {
+    lines.push(`  command    ${facts.spec.start}`);
+  }
+
+  lines.push(
+    facts.variableSources.length === 0
+      ? "  env        none"
+      : `  env        ${facts.variableCount} from ${facts.variableSources.join(", ")}`,
+  );
+
+  lines.push(`  not reproduced locally: ${NOT_REPRODUCED.join(", ")}`);
+
+  return lines;
+}
+
+/**
  * The port a project is served on locally.
  *
  * A service declaring an internal port gets that port: on the server it owns a
