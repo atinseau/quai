@@ -8,6 +8,7 @@
 
 import { join } from "node:path";
 import type { DeploySpec } from "./manifest";
+import { isReservedEnvKey } from "./env";
 import { contentTypeFor, resolveStaticFile } from "../supervisor/static";
 
 /**
@@ -26,6 +27,27 @@ export function devDirectory(args: string[]): string | undefined {
 
 /** Where a project is served when it declares nothing. */
 export const DEFAULT_LOCAL_PORT = 3000;
+
+/**
+ * The variables a project runs with locally.
+ *
+ * The manifest first, the local file over it — so a value can be changed
+ * without editing a tracked file — and the names Quai assigns itself excluded
+ * from both. That exclusion is what keeps PORT meaning the same thing here as
+ * on the server: a project that moved it would answer where nobody looks.
+ */
+export function localEnv(
+  manifest: Record<string, string> | undefined,
+  local: Record<string, string>,
+): Record<string, string> {
+  const merged: Record<string, string> = {};
+
+  for (const [key, value] of Object.entries({ ...manifest, ...local })) {
+    if (!isReservedEnvKey(key)) merged[key] = value;
+  }
+
+  return merged;
+}
 
 /**
  * The port a project is served on locally.
@@ -73,6 +95,8 @@ const INTERPRETERS: Record<string, string> = {
 export type LocalRunOptions = {
   root: string;
   port: number;
+  /** Variables read from a local env file, if the project has one. */
+  localEnvFile?: Record<string, string>;
   /** Where the function hosts are; defaults to the installed CLI's copy. */
   hostsDirectory?: string;
 };
@@ -107,7 +131,10 @@ export function localRunPlan(spec: DeploySpec, options: LocalRunOptions): LocalR
 
   // On the server each project owns a network namespace, so its declared port
   // is free. On a laptop they share one, so the developer picks the port.
-  const env: Record<string, string> = { ...spec.env, PORT: String(options.port) };
+  const env: Record<string, string> = {
+    ...localEnv(spec.env, options.localEnvFile ?? {}),
+    PORT: String(options.port),
+  };
 
   if (spec.type === "function") {
     const runtime = spec.runtime ?? "node";

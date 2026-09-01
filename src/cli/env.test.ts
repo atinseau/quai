@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { formatEnvFile, parseEnvAssignment, isReservedEnvKey } from "./env";
+import { formatEnvFile, parseEnvAssignment, parseEnvFile, isReservedEnvKey } from "./env";
 
 describe("setting a variable", () => {
   test("a simple assignment is split on the first equals", () => {
@@ -89,5 +89,43 @@ describe("pulling variables into a local file", () => {
 
   test("an empty set yields an empty file", () => {
     expect(formatEnvFile({})).toBe("");
+  });
+});
+
+// 'quai env pull' writes this file; without reading it back, a project that
+// needs a secret works in production and fails on the developer's machine.
+describe("reading a local env file", () => {
+  test("an assignment becomes a variable", () => {
+    expect(parseEnvFile("TOKEN=abc123\n")).toEqual({ TOKEN: "abc123" });
+  });
+
+  test("a quoted value keeps its spaces", () => {
+    expect(parseEnvFile('MSG="hello world"\n')).toEqual({ MSG: "hello world" });
+  });
+
+  test("what the writer escapes, the reader restores", () => {
+    // The round trip is the contract: anything 'quai env pull' can write must
+    // come back unchanged, or a secret arrives subtly corrupted.
+    const original = { Q: 'say "hi"', MULTI: "a\nb", PLAIN: "x" };
+    expect(parseEnvFile(formatEnvFile(original))).toEqual(original);
+  });
+
+  test("a value containing an equals sign survives", () => {
+    expect(parseEnvFile("DSN=postgres://u:p@h/db?x=1\n")).toEqual({
+      DSN: "postgres://u:p@h/db?x=1",
+    });
+  });
+
+  test("comments and blank lines are ignored", () => {
+    expect(parseEnvFile("# a note\n\nA=1\n")).toEqual({ A: "1" });
+  });
+
+  test("a line without an equals is skipped rather than fatal", () => {
+    // A hand-edited file should not stop a dev run over one stray line.
+    expect(parseEnvFile("garbage\nA=1\n")).toEqual({ A: "1" });
+  });
+
+  test("an empty file yields nothing", () => {
+    expect(parseEnvFile("")).toEqual({});
   });
 });

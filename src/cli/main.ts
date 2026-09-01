@@ -10,7 +10,7 @@
 import { readdir } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { collectFiles } from "./collect";
-import { formatEnvFile, isReservedEnvKey, parseEnvAssignment } from "./env";
+import { formatEnvFile, isReservedEnvKey, parseEnvAssignment, parseEnvFile } from "./env";
 import { configPath, readConfig, writeConfig } from "./config";
 import { configFileIn, loadProjectConfig } from "./config-file";
 import { devDirectory, localPort, localRunPlan, localStaticFile } from "./dev";
@@ -471,7 +471,15 @@ async function devCommand(args: string[]): Promise<void> {
 
   if (spec.build?.command) await runBuild(root, spec.build.command);
 
-  const plan = localRunPlan(spec, { root, port });
+  // 'quai env pull' writes this file; reading it back is what makes a project
+  // that needs a secret behave the same here as on the server.
+  const localEnvFile = parseEnvFile(
+    await Bun.file(join(root, ".env.local"))
+      .text()
+      .catch(() => ""),
+  );
+
+  const plan = localRunPlan(spec, { root, port, localEnvFile });
 
   if (plan.serveStatic !== null) {
     const directoryToServe = plan.serveStatic;

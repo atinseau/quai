@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { devDirectory, localPort, localRunPlan, localStaticFile } from "./dev";
+import { devDirectory, localEnv, localPort, localRunPlan, localStaticFile } from "./dev";
 
 describe("running a project locally", () => {
   test("a function is served by the same host the server uses", () => {
@@ -148,5 +148,28 @@ describe("which directory is run", () => {
 
   test("no argument means the current directory", () => {
     expect(devDirectory([])).toBeUndefined();
+  });
+});
+
+describe("which environment a project runs with", () => {
+  test("the manifest's variables reach the project", () => {
+    expect(localEnv({ NODE_ENV: "production" }, {})).toMatchObject({ NODE_ENV: "production" });
+  });
+
+  test("a local file overrides the manifest, so a value can be changed without editing a tracked file", () => {
+    expect(
+      localEnv({ API_URL: "https://prod" }, { API_URL: "http://localhost:9000" }),
+    ).toMatchObject({ API_URL: "http://localhost:9000" });
+  });
+
+  test("a secret pulled from the server is available locally", () => {
+    expect(localEnv(undefined, { TOKEN: "s3cret" })).toMatchObject({ TOKEN: "s3cret" });
+  });
+
+  test("neither source can override what Quai assigns itself", () => {
+    // PORT decides where the project listens; letting either source move it
+    // would make the project answer somewhere nobody is looking.
+    const env = localEnv({ PORT: "1111" }, { PORT: "2222" });
+    expect(env.PORT).toBeUndefined();
   });
 });
